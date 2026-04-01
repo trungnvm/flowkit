@@ -139,15 +139,14 @@ def _extract_media_gen_id(result: dict, req_type: str) -> str:
             return gen.get("mediaGenerationId", "")
 
     if req_type in ("GENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
-        # After polling: data.operations[].response.generatedVideos[].mediaGenerationId
+        # batchCheckAsyncVideoGenerationStatus response:
+        # operations[].operation.metadata.video.mediaGenerationId
         ops = data.get("operations", [])
         if ops:
-            # Check if poll completed (has response)
-            resp = ops[0].get("response", {})
-            vids = resp.get("generatedVideos", [])
-            if vids:
-                return vids[0].get("mediaGenerationId", "")
-            # Fallback: operation-level mediaGenerationId (pre-poll)
+            video_meta = ops[0].get("operation", {}).get("metadata", {}).get("video", {})
+            if video_meta.get("mediaGenerationId"):
+                return video_meta["mediaGenerationId"]
+            # Fallback: direct on operation (submit response, pre-poll)
             return ops[0].get("mediaGenerationId", "")
 
     return data.get("mediaGenerationId", "")
@@ -160,42 +159,72 @@ def _extract_output_url(result: dict, req_type: str) -> str:
         media = data.get("media", [])
         if media:
             gen = media[0].get("image", {}).get("generatedImage", {})
-            return gen.get("imageUri", gen.get("fifeUrl", ""))
+            return gen.get("fifeUrl", gen.get("imageUri", gen.get("encodedImage", "")))
 
     if req_type in ("GENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
+        # batchCheckAsyncVideoGenerationStatus response:
+        # operations[].operation.metadata.video.fifeUrl
         ops = data.get("operations", [])
         if ops:
-            resp = ops[0].get("response", {})
-            vids = resp.get("generatedVideos", [])
-            if vids:
-                return vids[0].get("videoUri", "")
+            video_meta = ops[0].get("operation", {}).get("metadata", {}).get("video", {})
+            return video_meta.get("fifeUrl", "")
 
     return data.get("videoUri", data.get("imageUri", ""))
 
 
 def _extract_operations(result: dict) -> list[dict]:
-    """Extract operations list from video gen / upscale submit response."""
+    """Extract operations from video gen / upscale submit response.
+
+    Submit response format:
+    {
+      "operations": [
+        {
+          "operation": {"name": "operations/xxx"},
+          "status": "MEDIA_GENERATION_STATUS_PROCESSING"
+        }
+      ]
+    }
+
+    For poll input to check_video_status, we pass these as-is.
+    """
     data = result.get("data", result)
-    return data.get("operations", [])
+    ops = data.get("operations", [])
+    # Validate structure
+    for op in ops:
+        op_name = op.get("operation", {}).get("name")
+        if not op_name:
+            logger.warning("Operation missing name: %s", op)
+    return ops
 
 
 # ─── W9: Video/Upscale Status Polling ────────────────────────
 
 async def _poll_operations(client, operations: list[dict], timeout: int = VIDEO_POLL_TIMEOUT) -> dict:
     """
-    Poll check_video_status until all operations are done or timeout.
+    Poll check_video_status until all operations complete or timeout.
 
-    Production response format:
+    Production response format from batchCheckAsyncVideoGenerationStatus:
     {
       "operations": [
         {
-          "done": true,
-          "response": {
-            "generatedVideos": [{"mediaGenerationId": "...", "videoUri": "..."}]
-          }
+          "operation": {
+            "name": "operations/xxx",
+            "metadata": {
+              "video": {
+                "mediaGenerationId": "...",
+                "fifeUrl": "https://..."
+              }
+            }
+          },
+          "status": "MEDIA_GENERATION_STATUS_SUCCESSFUL"  // or _FAILED, _PROCESSING
         }
       ]
     }
+
+    Status values:
+    - MEDIA_GENERATION_STATUS_PROCESSING / PENDING → keep polling
+    - MEDIA_GENERATION_STATUS_SUCCESSFUL → done
+    - MEDIA_GENERATION_STATUS_FAILED → error
     """
     if not operations:
         return {"error": "No operations to poll"}
@@ -218,21 +247,31 @@ async def _poll_operations(client, operations: list[dict], timeout: int = VIDEO_
         if not ops:
             continue
 
-        # Check if all operations are done
-        all_done = all(op.get("done", False) for op in ops)
+        all_done = True
+        has_error = False
+
+        for op in ops:
+            status = op.get("status", "")
+            if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+                continue  # done
+            elif status == "MEDIA_GENERATION_STATUS_FAILED":
+                error_msg = f"Operation failed: {op.get('operation', {}).get('name', '?')}"
+                logger.error(error_msg)
+                has_error = True
+                break
+            else:
+                # Still processing
+                all_done = False
+
+        if has_error:
+            return {"error": error_msg}
+
         if all_done:
             logger.info("All %d operations completed after %ds", len(ops), elapsed)
             return {"data": data}
 
-        # Check for errors in individual operations
-        for op in ops:
-            if op.get("error"):
-                error_msg = op["error"].get("message", str(op["error"]))
-                logger.error("Operation error: %s", error_msg)
-                return {"error": error_msg}
-
-        logger.debug("Poll %ds/%ds: %d/%d done", elapsed, timeout,
-                      sum(1 for o in ops if o.get("done")), len(ops))
+        done_count = sum(1 for o in ops if o.get("status") == "MEDIA_GENERATION_STATUS_SUCCESSFUL")
+        logger.debug("Poll %ds/%ds: %d/%d done", elapsed, timeout, done_count, len(ops))
 
     return {"error": f"Polling timeout after {timeout}s"}
 
@@ -397,14 +436,21 @@ async def _handle_generate_video(client, req: dict, orientation: str) -> dict:
     if _is_error(submit_result):
         return submit_result
 
-    # Step 2: Extract operations and poll for completion
+    # Step 2: Extract operations — may already be complete
     operations = _extract_operations(submit_result)
     if not operations:
         return {"error": "Video gen returned no operations"}
 
-    # Store operation name for tracking
-    op_name = operations[0].get("name", "")
+    op_name = operations[0].get("operation", {}).get("name", "")
     await crud.update_request(req["id"], request_id=op_name)
+
+    # Check if already complete (skip polling)
+    status = operations[0].get("status", "")
+    if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+        logger.info("Video gen completed immediately")
+        return submit_result
+    if status == "MEDIA_GENERATION_STATUS_FAILED":
+        return {"error": "Video generation failed immediately"}
 
     logger.info("Video gen submitted, polling %d operations...", len(operations))
     return await _poll_operations(client, operations)
@@ -476,8 +522,15 @@ async def _handle_generate_video_refs(client, req: dict, orientation: str) -> di
     if not operations:
         return {"error": "R2V returned no operations"}
 
-    op_name = operations[0].get("name", "")
+    op_name = operations[0].get("operation", {}).get("name", "")
     await crud.update_request(req["id"], request_id=op_name)
+
+    status = operations[0].get("status", "")
+    if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+        logger.info("R2V completed immediately")
+        return submit_result
+    if status == "MEDIA_GENERATION_STATUS_FAILED":
+        return {"error": "R2V failed immediately"}
 
     logger.info("R2V submitted with %d refs, polling %d operations...", len(ref_ids), len(operations))
     return await _poll_operations(client, operations)
@@ -507,13 +560,20 @@ async def _handle_upscale_video(client, req: dict, orientation: str) -> dict:
     if _is_error(submit_result):
         return submit_result
 
-    # Step 2: Poll for completion
+    # Step 2: Extract operations — may already be complete
     operations = _extract_operations(submit_result)
     if not operations:
         return {"error": "Upscale returned no operations"}
 
-    op_name = operations[0].get("name", "")
+    op_name = operations[0].get("operation", {}).get("name", "")
     await crud.update_request(req["id"], request_id=op_name)
+
+    status = operations[0].get("status", "")
+    if status == "MEDIA_GENERATION_STATUS_SUCCESSFUL":
+        logger.info("Upscale completed immediately")
+        return submit_result
+    if status == "MEDIA_GENERATION_STATUS_FAILED":
+        return {"error": "Upscale failed immediately"}
 
     logger.info("Upscale submitted, polling %d operations...", len(operations))
     return await _poll_operations(client, operations, timeout=300)

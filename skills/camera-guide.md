@@ -99,6 +99,41 @@ Apply different camera techniques to each time segment for maximum cinematic eff
 6-8s: Wide shot, camera continues pulling back showing the quiet Open Market at sunset, volumetric light through the awnings.
 ```
 
+## Character Dialogue
+
+Embed dialogue in quotes within sub-clip segments. The AI generates lip-sync and voice matching the character's `voice_description`.
+
+**Format:** `[camera] + [action] + [character] says "[dialogue]"`
+
+### Example: Bedtime Scene
+```
+0-3s: Medium tracking shot following Luna walking to her bed, soft warm lamplight. Luna says "Bye mom, I love you, see you tomorrow."
+3-5s: Close-up of Luna's hand reaching up to the bedside lamp. Luna whispers "Goodnight, stars."
+5-8s: Static wide shot through the bedroom window looking out at the starry night sky, moonlight casting soft shadows. Silence, gentle wind sound.
+```
+
+### Example: Discovery Scene
+```
+0-2s: Over-the-shoulder shot, Luna kneels at Chocolate River. Luna gasps "What is this place?"
+2-5s: Close-up of Luna dipping a paw in, tasting it. Luna says "It's... chocolate! Real chocolate!" with excited voice.
+5-8s: Wide crane up shot, Luna jumps up with arms raised. Luna shouts "This is the best planet ever!"
+```
+
+### Example: Dramatic Confrontation
+```
+0-3s: Low angle push in, Hero grips Magic Sword, chiaroscuro lighting. Hero says "I won't let you take the kingdom."
+3-5s: Reverse shot, close-up of Villain's face, Dutch angle. Villain laughs "You think a sword can stop me?"
+5-8s: Wide two-shot, both characters face off, volumetric light between them. Silence, tension.
+```
+
+### Dialogue Rules
+
+1. **Match voice_description** — dialogue tone should align with the character's voice profile. If Luna has "soft gentle whisper", don't write her shouting aggressively.
+2. **Short lines** — max 10-15 words per 2-3s segment. AI needs time to animate lip-sync.
+3. **One speaker per segment** — don't put two characters talking in the same time block.
+4. **Silent segments are powerful** — not every segment needs dialogue. Use silence for atmosphere, reactions, and visual storytelling.
+5. **Action verbs for delivery** — use `says`, `whispers`, `shouts`, `gasps`, `laughs`, `mutters` to guide tone.
+
 ## Common Mistakes
 
 - "Camera zooms" — too vague. Say "slow push in" or "dolly zoom" instead.

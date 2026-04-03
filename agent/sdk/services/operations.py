@@ -184,9 +184,14 @@ class OperationService:
         pid = scene.get("_project_id", "0")
 
         src = source_media_id
+        orient_prefix = "vertical" if orientation == "VERTICAL" else "horizontal"
         if not src:
-            orient_prefix = "vertical" if orientation == "VERTICAL" else "horizontal"
             src = scene.get(f"{orient_prefix}_image_media_id")
+        # Fall back to parent scene's image for INSERT scenes
+        if not src and scene.get("parent_scene_id"):
+            parent = await crud.get_scene(scene["parent_scene_id"])
+            if parent:
+                src = parent.get(f"{orient_prefix}_image_media_id")
         if not src:
             return {"error": "No source image to edit — generate a scene image first"}
 

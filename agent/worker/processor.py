@@ -68,7 +68,7 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
         if not scene.get(f"{prefix}_image_media_id"):
             return False
 
-    # Edit requests need source media
+    # Edit requests need source media (own image or parent's for INSERT scenes)
     if req_type in ("EDIT_IMAGE", "EDIT_CHARACTER_IMAGE"):
         if not req.get("source_media_id"):
             if req_type == "EDIT_CHARACTER_IMAGE":
@@ -77,7 +77,13 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
                     return False
             elif req_type == "EDIT_IMAGE":
                 scene = await crud.get_scene(req.get("scene_id"))
-                if not scene or not scene.get(f"{prefix}_image_media_id"):
+                if not scene:
+                    return True  # let _dispatch handle
+                src = scene.get(f"{prefix}_image_media_id")
+                if not src and scene.get("parent_scene_id"):
+                    parent = await crud.get_scene(scene["parent_scene_id"])
+                    src = parent.get(f"{prefix}_image_media_id") if parent else None
+                if not src:
                     return False
 
     return True

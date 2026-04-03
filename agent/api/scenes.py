@@ -26,6 +26,20 @@ def _scene_to_flat(sdk_scene) -> dict:
 @router.post("", response_model=Scene)
 async def create(body: SceneCreate):
     data = body.model_dump(exclude_none=True)
+
+    # Auto-shift subsequent scenes when inserting
+    if data.get("chain_type") == "INSERT" and data.get("video_id"):
+        insert_order = data.get("display_order", 0)
+        existing = await _repo.list_scenes(data["video_id"])
+        # Shift scenes at or after insert_order in reverse to avoid collisions
+        to_shift = sorted(
+            [s for s in existing if s.display_order >= insert_order],
+            key=lambda s: s.display_order,
+            reverse=True,
+        )
+        for s in to_shift:
+            await _repo.update("scene", s.id, display_order=s.display_order + 1)
+
     sdk_scene = await _repo.create_scene(**data)
     return _scene_to_flat(sdk_scene)
 

@@ -32,25 +32,34 @@ async def process_pending_requests():
     """Main worker loop — dispatches pending requests concurrently."""
     client = get_flow_client()
     active: set[str] = set()
+    deferred: dict[str, float] = {}  # rid -> defer_until timestamp
 
     while True:
         try:
             if not client.connected:
                 await asyncio.sleep(POLL_INTERVAL)
                 continue
-            for req in await crud.list_pending_requests():
+            now = time.time()
+            pending = await crud.list_pending_requests()
+            if pending and not active:
+                logger.info("Worker: %d pending, %d active, picking up...", len(pending), len(active))
+            for req in pending:
                 rid = req["id"]
+                # Skip recently deferred requests
+                if rid in deferred and deferred[rid] > now:
+                    continue
+                deferred.pop(rid, None)
                 if rid not in active and len(active) < MAX_CONCURRENT_REQUESTS:
                     active.add(rid)
-                    asyncio.create_task(_tracked(req, active))
+                    asyncio.create_task(_tracked(req, active, deferred))
         except Exception as e:
             logger.exception("Worker loop error: %s", e)
         await asyncio.sleep(POLL_INTERVAL)
 
 
-async def _tracked(req: dict, active: set):
+async def _tracked(req: dict, active: set, deferred: dict):
     try:
-        await _process_one(req)
+        await _process_one(req, deferred)
     finally:
         active.discard(req["id"])
 
@@ -66,6 +75,7 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
         if not scene:
             return True  # let _dispatch handle "scene not found"
         if not scene.get(f"{prefix}_image_media_id"):
+            logger.info("VIDEO prereq deferred: scene=%s no %s_image_media_id", req.get("scene_id","")[:12], prefix)
             return False
 
     # Edit requests need source media (own image or parent's for INSERT scenes)
@@ -83,13 +93,14 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
                 if not src and scene.get("parent_scene_id"):
                     parent = await crud.get_scene(scene["parent_scene_id"])
                     src = parent.get(f"{prefix}_image_media_id") if parent else None
+                logger.info("EDIT_IMAGE prereq: scene=%s src=%s parent=%s", req.get("scene_id","")[:12], src, scene.get("parent_scene_id","")[:12] if scene.get("parent_scene_id") else "none")
                 if not src:
                     return False
 
     return True
 
 
-async def _process_one(req: dict):
+async def _process_one(req: dict, deferred: dict = None):
     rid, req_type = req["id"], req["type"]
     orientation = req.get("orientation", "VERTICAL")
 
@@ -100,7 +111,8 @@ async def _process_one(req: dict):
 
     # Check prerequisites before dispatching — don't burn retries on missing deps
     if not await _prerequisites_met(req, orientation):
-        logger.debug("Request %s deferred — prerequisites not met", rid[:8])
+        if deferred is not None:
+            deferred[rid] = time.time() + 30  # defer 30s before rechecking
         return
 
     logger.info("Processing request %s type=%s", rid[:8], req_type)

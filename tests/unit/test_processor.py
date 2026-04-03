@@ -78,6 +78,16 @@ class TestIsAlreadyCompleted:
         assert result is False
         mock_crud.get_scene.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_edit_image_never_skipped_even_when_image_completed(self, sample_scene_row):
+        """EDIT_IMAGE should always run — it replaces the existing image."""
+        req = make_req(req_type="EDIT_IMAGE", scene_id="scene-001")
+        # sample_scene_row has vertical_image_status = "COMPLETED"
+        with patch("agent.worker.processor.crud") as mock_crud:
+            mock_crud.get_scene = AsyncMock(return_value=sample_scene_row)
+            result = await _is_already_completed(req, "VERTICAL")
+        assert result is False
+
 
 # ---------------------------------------------------------------------------
 # _mark_scene_failed

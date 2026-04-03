@@ -199,10 +199,23 @@ class FlowClient:
     async def edit_image(self, prompt: str, source_media_id: str,
                           project_id: str,
                           aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT",
-                          user_paygate_tier: str = "PAYGATE_TIER_ONE") -> dict:
-        """Edit an existing image using IMAGE_INPUT_TYPE_BASE_IMAGE."""
+                          user_paygate_tier: str = "PAYGATE_TIER_ONE",
+                          character_media_ids: list[str] = None) -> dict:
+        """Edit an existing image using IMAGE_INPUT_TYPE_BASE_IMAGE.
+
+        If character_media_ids is provided, appends them as IMAGE_INPUT_TYPE_REFERENCE
+        after the base image. Order: [base_image, char_A, char_B, ...].
+        This helps Google Flow detect characters for consistent edits.
+        """
         ts = int(time.time() * 1000)
         ctx = self._client_context(project_id, user_paygate_tier)
+
+        image_inputs = [
+            {"name": source_media_id, "imageInputType": "IMAGE_INPUT_TYPE_BASE_IMAGE"}
+        ]
+        if character_media_ids:
+            for mid in character_media_ids:
+                image_inputs.append({"name": mid, "imageInputType": "IMAGE_INPUT_TYPE_REFERENCE"})
 
         request_item = {
             "clientContext": {**ctx, "sessionId": f";{ts}"},
@@ -210,9 +223,7 @@ class FlowClient:
             "structuredPrompt": {"parts": [{"text": prompt}]},
             "imageAspectRatio": aspect_ratio,
             "imageModelName": IMAGE_MODELS["NANO_BANANA_PRO"],
-            "imageInputs": [
-                {"name": source_media_id, "imageInputType": "IMAGE_INPUT_TYPE_BASE_IMAGE"}
-            ],
+            "imageInputs": image_inputs,
         }
 
         body = {

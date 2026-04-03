@@ -47,7 +47,7 @@ async def apply_scene_result(
     p = "vertical" if orientation == "VERTICAL" else "horizontal"
     updates = {}
 
-    if req_type in ("GENERATE_IMAGE", "EDIT_IMAGE"):
+    if req_type in ("GENERATE_IMAGE", "REGENERATE_IMAGE", "EDIT_IMAGE"):
         updates.update({
             f"{p}_image_media_id": result.media_id,
             f"{p}_image_url": result.url,

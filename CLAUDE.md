@@ -22,11 +22,13 @@ curl -s http://127.0.0.1:8100/health
 5. **Locations use landscape, characters use portrait** — reference image orientation depends on entity type.
 6. **UUID extraction** — if a response gives `CAMS...` instead of UUID, extract UUID from the `fifeUrl` in the response (URL contains it: `/image/{UUID}?...`).
 7. **Cascade on regen** — regenerating an image auto-clears downstream video + upscale. Regenerating video auto-clears upscale.
-8. **Video prompts use sub-clip timing** — structure 8s video as time segments. The scene image is frame 0. Each segment: `[camera] + [action] + [dialogue]`.
-9. **Use cinematic camera language** — each sub-clip specifies camera angle + movement + lighting. See `skills/camera-guide.md` for full reference. Follow the emotional arc: wide (opening) → medium+push in (rising) → close-up (peak) → pull back wide (release).
-10. **Character dialogue in sub-clips** — embed speech in quotes: `"0-3s: Medium tracking shot, Luna walks to bed. Luna says 'Bye mom, I love you, see you tomorrow.'"` Rules: max 10-15 words per character per 2-3s, multi-character exchanges OK (label each speaker: `Luna asks "Ready?" Hero replies "Let's go."`), use delivery verbs (says, whispers, shouts, asks, replies), silent segments are powerful.
-11. **Voice descriptions on characters** — `voice_description` field (max ~30 words) auto-appended to video prompts. Dialogue tone must match voice profile.
-12. **No background music** — the worker auto-appends "No background music. Keep only natural sound effects." to all video prompts.
+8. **REGENERATE vs GENERATE** — `GENERATE_IMAGE` skips if image already exists (COMPLETED). Use `REGENERATE_IMAGE` to force a fresh generation (bypasses skip, cascades downstream). Same pattern: `REGENERATE_CHARACTER_IMAGE` clears existing ref image and generates from scratch.
+9. **Edit image includes character refs** — `EDIT_IMAGE` automatically resolves character references from the scene's `character_names` and sends them as imageInputs after the base image: `[base_image, char_A, char_B, ...]`. This helps Google Flow detect and maintain character consistency during edits. Same for `EDIT_CHARACTER_IMAGE`.
+10. **Video prompts use sub-clip timing** — structure 8s video as time segments. The scene image is frame 0. Each segment: `[camera] + [action] + [dialogue]`.
+11. **Use cinematic camera language** — each sub-clip specifies camera angle + movement + lighting. See `skills/camera-guide.md` for full reference. Follow the emotional arc: wide (opening) → medium+push in (rising) → close-up (peak) → pull back wide (release).
+12. **Character dialogue in sub-clips** — embed speech in quotes: `"0-3s: Medium tracking shot, Luna walks to bed. Luna says 'Bye mom, I love you, see you tomorrow.'"` Rules: max 10-15 words per character per 2-3s, multi-character exchanges OK (label each speaker: `Luna asks "Ready?" Hero replies "Let's go."`), use delivery verbs (says, whispers, shouts, asks, replies), silent segments are powerful.
+13. **Voice descriptions on characters** — `voice_description` field (max ~30 words) auto-appended to video prompts. Dialogue tone must match voice profile.
+14. **No background music** — the worker auto-appends "No background music. Keep only natural sound effects." to all video prompts.
 
 **Complete video_prompt example:**
 ```
@@ -284,8 +286,12 @@ ffmpeg -y -f concat -safe 0 -i concat.txt -c copy -movflags +faststart output.mp
 
 | type | Required fields | What it does |
 |------|----------------|-------------|
-| `GENERATE_CHARACTER_IMAGE` | `character_id`, `project_id` | Gen ref image → upload → UUID media_id |
-| `GENERATE_IMAGE` | `scene_id`, `project_id`, `video_id`, `orientation` | Gen scene image with ref imageInputs |
+| `GENERATE_CHARACTER_IMAGE` | `character_id`, `project_id` | Gen ref image → upload → UUID media_id (skips if already exists) |
+| `REGENERATE_CHARACTER_IMAGE` | `character_id`, `project_id` | Clear existing + regenerate ref image (never skipped) |
+| `EDIT_CHARACTER_IMAGE` | `character_id`, `project_id` | Edit ref image with base image + prompt (never skipped) |
+| `GENERATE_IMAGE` | `scene_id`, `project_id`, `video_id`, `orientation` | Gen scene image with ref imageInputs (skips if already COMPLETED) |
+| `REGENERATE_IMAGE` | `scene_id`, `project_id`, `video_id`, `orientation` | Force-regenerate scene image (never skipped, cascades video+upscale) |
+| `EDIT_IMAGE` | `scene_id`, `project_id`, `video_id`, `orientation` | Edit scene image with base image + character refs in imageInputs |
 | `GENERATE_VIDEO` | `scene_id`, `project_id`, `video_id`, `orientation` | Gen video from scene image (i2v) |
 | `GENERATE_VIDEO_REFS` | `scene_id`, `project_id`, `video_id`, `orientation` | Gen video from ref images only (r2v) |
 | `UPSCALE_VIDEO` | `scene_id`, `project_id`, `video_id`, `orientation` | Upscale video to 4K |

@@ -171,6 +171,7 @@ class TestEditSceneImage:
 
         with patch("agent.sdk.services.operations.crud") as mock_crud:
             mock_crud.get_project = AsyncMock(return_value=project)
+            mock_crud.get_project_characters = AsyncMock(return_value=[])
 
             result = await service.edit_scene_image(base_scene, "VERTICAL", source_media_id=SAMPLE_UUID)
 
@@ -186,6 +187,7 @@ class TestEditSceneImage:
 
         with patch("agent.sdk.services.operations.crud") as mock_crud:
             mock_crud.get_project = AsyncMock(return_value=project)
+            mock_crud.get_project_characters = AsyncMock(return_value=[])
 
             result = await service.edit_scene_image(base_scene, "VERTICAL", source_media_id=None)
 

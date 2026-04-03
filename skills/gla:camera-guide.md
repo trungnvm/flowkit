@@ -67,6 +67,29 @@ Reference for writing video prompts with professional camera language. AI video 
 | **Extreme close-up** | `extreme close-up, macro, detail shot` | Eyes, hands, objects |
 | **Two-shot** | `two-shot, both characters in frame` | Relationship, dialogue |
 
+## Lens Style
+
+| Lens | Prompt keywords | Effect | Best for |
+|------|----------------|--------|----------|
+| **35mm wide** | `35mm wide angle lens, wide perspective` | Environment + subject together, slight distortion | Establishing shots, interiors, action |
+| **50mm standard** | `50mm lens, natural perspective` | Most natural look, no distortion | Dialogue, general scenes |
+| **85mm portrait** | `85mm portrait lens, background compression` | Subject isolation, creamy background blur | Character close-ups, emotional moments |
+| **135mm telephoto** | `telephoto lens, compressed perspective, distant observer` | Extreme compression, voyeuristic feel | Surveillance, longing, separation |
+| **Anamorphic** | `anamorphic lens, horizontal lens flare, widescreen cinematic` | Oval bokeh, horizontal flares, ultra-wide | Epic cinematic, sci-fi, blockbuster feel |
+| **Fisheye** | `fisheye lens, barrel distortion, ultra-wide distorted` | Extreme wide distortion, immersive | POV action, skateboard, surreal |
+| **Macro** | `macro lens, extreme detail, tiny subject fills frame` | Reveals invisible details | Insects, textures, miniature worlds |
+
+## Speed & Time
+
+| Technique | Prompt keywords | Effect | Best for |
+|-----------|----------------|--------|----------|
+| **Slow motion** | `slow motion, 120fps, time slows down` | Dramatic emphasis, beauty | Impacts, emotions, reveals |
+| **Timelapse** | `timelapse, time passing rapidly, clouds racing` | Passage of time, transformation | Sunrise/sunset, crowds, building |
+| **Speed ramp** | `speed ramp, normal speed then slow motion` | Dynamic rhythm change | Action peaks, bullet-time moments |
+| **Hyperlapse** | `hyperlapse, moving timelapse, traveling through` | Moving through time and space | City walks, journeys, exploration |
+| **Freeze frame** | `freeze frame, action stops, time frozen` | Dramatic pause, emphasis | Character intros, climactic moments |
+| **Reverse** | `reverse motion, time rewinding, playing backwards` | Surreal, undo, magical | Dream sequences, time manipulation |
+
 ## Combining in Sub-clip Prompts
 
 Apply different camera techniques to each time segment for maximum cinematic effect:
@@ -90,6 +113,13 @@ Apply different camera techniques to each time segment for maximum cinematic eff
 0-2s: Dutch angle low shot, Pippip leaps onto Fish Stall counter, whip pan motion blur.
 2-5s: Dynamic tracking shot following three fish arcing through the air, crowd blurred in background.
 5-8s: Crane up from Pippip catching the last fish to bird's eye view of the cheering Open Market crowd.
+```
+
+### Example: Cinematic Lens + Speed
+```
+0-2s: Anamorphic wide shot of the marketplace at dawn, horizontal lens flares from the rising sun, hyperlapse of merchants setting up stalls.
+2-5s: 85mm portrait lens, slow motion close-up of Pip's hands arranging fish on ice, shallow DOF, golden hour backlight.
+5-8s: 35mm wide angle, normal speed, camera tracks alongside Pip walking through the busy market, morning energy.
 ```
 
 ### Example: Peaceful Ending

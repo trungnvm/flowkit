@@ -32,6 +32,17 @@ One parent scene → multiple CONTINUATION children = alternate story paths.
 - **When:** "What if" variations, A/B testing different story directions
 - **How:** Multiple scenes with same `parent_scene_id` but different prompts
 
+### T6: Iterative Image Refinement
+Polish scene images before committing to video generation.
+- **When:** Image is close but needs adjustment (lighting, composition, expression, framing)
+- **How:**
+  - `EDIT_IMAGE` — keeps composition, tweaks details. Automatically sends character refs for consistency.
+  - `REGENERATE_IMAGE` — fresh take from the same prompt (different seed, bypasses skip check)
+  - `EDIT_CHARACTER_IMAGE` — refine a character reference before using it in scenes
+  - `REGENERATE_CHARACTER_IMAGE` — completely new reference image (clears existing, regenerates from scratch)
+- **Workflow:** Generate → Review → Edit/Regen → Review → Video
+- **Tip:** Edit preserves the base image structure. Regen gives a completely new interpretation of the same prompt.
+
 ## Step 1: Analyze current video
 
 ```bash
@@ -73,6 +84,7 @@ Present the plan and ask which enhancements to apply. Then execute:
 
 1. Create any new INSERT scenes (`POST /api/scenes`)
 2. Generate images for new scenes (`/gla:gen-images`)
+2b. Review generated images — refine with EDIT_IMAGE or REGENERATE_IMAGE as needed
 3. Set up chain end_scene_media_ids
 4. Generate all videos with chaining (`/gla:gen-chain-videos`)
 5. For r2v scenes: `POST /api/requests {type: "GENERATE_VIDEO_REFS"}`

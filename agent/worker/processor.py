@@ -12,14 +12,16 @@ from agent.db import crud
 from agent.services.flow_client import get_flow_client
 from agent.config import POLL_INTERVAL, MAX_RETRIES, API_COOLDOWN
 from agent.worker._parsing import _is_error
-from agent.sdk.services.result_handler import parse_result, apply_scene_result
+from agent.sdk.services.result_handler import parse_result, apply_scene_result, apply_character_result
 
 logger = logging.getLogger(__name__)
 
 _retry_state: dict[str, tuple[int, float]] = {}
 
-_API_CALL_TYPES = {"GENERATE_IMAGE", "GENERATE_VIDEO", "GENERATE_VIDEO_REFS",
-                   "UPSCALE_VIDEO", "GENERATE_CHARACTER_IMAGE", "EDIT_IMAGE"}
+_API_CALL_TYPES = {"GENERATE_IMAGE", "REGENERATE_IMAGE", "EDIT_IMAGE",
+                   "GENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO",
+                   "GENERATE_CHARACTER_IMAGE", "REGENERATE_CHARACTER_IMAGE",
+                   "EDIT_CHARACTER_IMAGE"}
 
 
 async def process_pending_requests():
@@ -71,7 +73,12 @@ async def _process_one(req: dict):
         else:
             gen_result = parse_result(result, req_type)
             await crud.update_request(rid, status="COMPLETED", media_id=gen_result.media_id, output_url=gen_result.url)
-            await apply_scene_result(req.get("scene_id"), req_type, orientation, gen_result)
+            if req_type in ("GENERATE_CHARACTER_IMAGE", "REGENERATE_CHARACTER_IMAGE", "EDIT_CHARACTER_IMAGE"):
+                char_id = req.get("character_id")
+                if char_id:
+                    await apply_character_result(char_id, gen_result)
+            else:
+                await apply_scene_result(req.get("scene_id"), req_type, orientation, gen_result)
             logger.info("Request %s COMPLETED: media=%s", rid[:8], gen_result.media_id[:20] if gen_result.media_id else "?")
     except Exception as e:
         logger.exception("Request %s exception: %s", rid[:8], e)
@@ -86,14 +93,14 @@ async def _dispatch(req: dict, orientation: str) -> dict:
     pid = req.get("project_id", "0")
 
     # Scene-based operations
-    if req_type in ("GENERATE_IMAGE", "EDIT_IMAGE", "GENERATE_VIDEO",
-                    "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
+    if req_type in ("GENERATE_IMAGE", "REGENERATE_IMAGE", "EDIT_IMAGE",
+                    "GENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO"):
         scene = await crud.get_scene(req.get("scene_id"))
         if not scene:
             return {"error": "Scene not found"}
         scene["_project_id"] = pid
 
-        if req_type == "GENERATE_IMAGE":
+        if req_type in ("GENERATE_IMAGE", "REGENERATE_IMAGE"):
             return await ops.generate_scene_image(scene, orientation)
         if req_type == "EDIT_IMAGE":
             return await ops.edit_scene_image(scene, orientation, source_media_id=req.get("source_media_id"))
@@ -105,10 +112,29 @@ async def _dispatch(req: dict, orientation: str) -> dict:
             return await ops.upscale_scene_video(scene, orientation, request_id=rid)
 
     # Character operations
-    if req_type == "GENERATE_CHARACTER_IMAGE":
+    if req_type in ("GENERATE_CHARACTER_IMAGE", "REGENERATE_CHARACTER_IMAGE", "EDIT_CHARACTER_IMAGE"):
         char = await crud.get_character(req.get("character_id"))
         if not char:
             return {"error": "Character not found"}
+        if req_type == "REGENERATE_CHARACTER_IMAGE":
+            # Clear existing media so generate_reference_image takes the normal (not fast) path
+            await crud.update_character(char["id"], media_id=None, reference_image_url=None)
+            char["media_id"] = None
+            char["reference_image_url"] = None
+            return await ops.generate_reference_image(char, pid)
+        if req_type == "EDIT_CHARACTER_IMAGE":
+            src = req.get("source_media_id") or char.get("media_id")
+            if not src:
+                return {"error": "No source image to edit — generate a reference image first"}
+            edit_prompt = char.get("image_prompt") or char.get("description", "")
+            project = await crud.get_project(pid) if pid != "0" else None
+            tier = project.get("user_paygate_tier", "PAYGATE_TIER_ONE") if project else "PAYGATE_TIER_ONE"
+            aspect = "IMAGE_ASPECT_RATIO_LANDSCAPE" if char.get("entity_type") in ("location",) else "IMAGE_ASPECT_RATIO_PORTRAIT"
+            return await ops._client.edit_image(
+                prompt=edit_prompt, source_media_id=src,
+                project_id=pid, aspect_ratio=aspect,
+                user_paygate_tier=tier,
+            )
         return await ops.generate_reference_image(char, pid)
 
     return {"error": f"Unknown request type: {req_type}"}
@@ -148,7 +174,7 @@ async def _mark_scene_failed(req: dict):
     prefix = "vertical" if req.get("orientation", "VERTICAL") == "VERTICAL" else "horizontal"
     req_type = req["type"]
     updates = {}
-    if req_type in ("GENERATE_IMAGE", "EDIT_IMAGE"):
+    if req_type in ("GENERATE_IMAGE", "REGENERATE_IMAGE", "EDIT_IMAGE"):
         updates[f"{prefix}_image_status"] = "FAILED"
     elif req_type in ("GENERATE_VIDEO", "GENERATE_VIDEO_REFS"):
         updates[f"{prefix}_video_status"] = "FAILED"
@@ -167,7 +193,9 @@ async def _is_already_completed(req: dict, orientation: str) -> bool:
     if not scene:
         return False
     prefix = "vertical" if orientation == "VERTICAL" else "horizontal"
-    if req_type in ("GENERATE_IMAGE", "EDIT_IMAGE"):
+    if req_type in ("EDIT_IMAGE", "REGENERATE_IMAGE", "REGENERATE_CHARACTER_IMAGE", "EDIT_CHARACTER_IMAGE"):
+        return False  # Always run — explicitly requesting new generation
+    if req_type == "GENERATE_IMAGE":
         return scene.get(f"{prefix}_image_status") == "COMPLETED"
     if req_type in ("GENERATE_VIDEO", "GENERATE_VIDEO_REFS"):
         return scene.get(f"{prefix}_video_status") == "COMPLETED"

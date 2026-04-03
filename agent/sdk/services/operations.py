@@ -172,7 +172,12 @@ class OperationService:
 
     async def edit_scene_image(self, scene: dict, orientation: str,
                                source_media_id: str | None = None) -> dict:
-        """Edit an existing scene image using IMAGE_INPUT_TYPE_BASE_IMAGE."""
+        """Edit an existing scene image using IMAGE_INPUT_TYPE_BASE_IMAGE.
+
+        Resolves character refs from scene's character_names and passes them
+        as IMAGE_INPUT_TYPE_REFERENCE after the base image. Order:
+        [base_image, char_A, char_B, ...] — helps Google Flow detect characters.
+        """
         project = await crud.get_project(scene.get("_project_id", "0"))
         aspect = "IMAGE_ASPECT_RATIO_PORTRAIT" if orientation == "VERTICAL" else "IMAGE_ASPECT_RATIO_LANDSCAPE"
         tier = project.get("user_paygate_tier", "PAYGATE_TIER_ONE") if project else "PAYGATE_TIER_ONE"
@@ -187,10 +192,28 @@ class OperationService:
 
         edit_prompt = scene.get("image_prompt") or scene.get("prompt", "")
 
+        # Resolve character reference media_ids for edit consistency
+        char_media_ids = None
+        char_names_raw = scene.get("character_names")
+        if char_names_raw and pid:
+            if isinstance(char_names_raw, str):
+                try:
+                    char_names_raw = json.loads(char_names_raw)
+                except json.JSONDecodeError:
+                    char_names_raw = []
+            if isinstance(char_names_raw, list) and char_names_raw:
+                project_chars = await crud.get_project_characters(pid)
+                valid_ids = []
+                for c in project_chars:
+                    if c["name"] in char_names_raw and c.get("media_id"):
+                        valid_ids.append(c["media_id"])
+                char_media_ids = valid_ids if valid_ids else None
+
         return await self._client.edit_image(
             prompt=edit_prompt, source_media_id=src,
             project_id=pid, aspect_ratio=aspect,
             user_paygate_tier=tier,
+            character_media_ids=char_media_ids,
         )
 
     # ------------------------------------------------------------------
@@ -495,6 +518,23 @@ class OperationService:
         """Queue a GENERATE_CHARACTER_IMAGE request. Returns request id."""
         row = await crud.create_request(
             req_type="GENERATE_CHARACTER_IMAGE",
+            character_id=character_id, project_id=project_id,
+        )
+        return row["id"]
+
+    async def queue_regenerate_scene_image(self, scene_id: str, project_id: str,
+                                           video_id: str, orientation: str = "VERTICAL") -> str:
+        """Queue a REGENERATE_IMAGE request (bypasses skip check). Returns request id."""
+        row = await crud.create_request(
+            req_type="REGENERATE_IMAGE", orientation=orientation,
+            scene_id=scene_id, project_id=project_id, video_id=video_id,
+        )
+        return row["id"]
+
+    async def queue_regenerate_character_image(self, character_id: str, project_id: str) -> str:
+        """Queue a REGENERATE_CHARACTER_IMAGE request (clears existing, regenerates). Returns request id."""
+        row = await crud.create_request(
+            req_type="REGENERATE_CHARACTER_IMAGE",
             character_id=character_id, project_id=project_id,
         )
         return row["id"]

@@ -29,6 +29,9 @@ curl -s http://127.0.0.1:8100/health
 12. **Character dialogue in sub-clips** — embed speech in quotes: `"0-3s: Medium tracking shot, Luna walks to bed. Luna says 'Bye mom, I love you, see you tomorrow.'"` Rules: max 10-15 words per character per 2-3s, multi-character exchanges OK (label each speaker: `Luna asks "Ready?" Hero replies "Let's go."`), use delivery verbs (says, whispers, shouts, asks, replies), silent segments are powerful.
 13. **Voice descriptions on characters** — `voice_description` field (max ~30 words) auto-appended to video prompts. Dialogue tone must match voice profile.
 14. **No background music** — the worker auto-appends "No background music. Keep only natural sound effects." to all video prompts.
+15. **Max 5 concurrent requests to Google Flow** — Google's API processes max 5 requests simultaneously. Submitting more causes requests to get stuck in PROCESSING state forever. **Always batch in groups of 5**: submit 5 → poll every 10s → when batch completes → submit next 5. NEVER submit all 40 scene requests at once.
+16. **Image Material required on project** — every project must have a `material` field (e.g., `realistic`, `3d_pixar`, `anime`, `stop_motion`, `minecraft`, `oil_painting`). Material controls image_prompt style for entities AND scene_prefix for scenes. List available: `GET /api/materials`.
+17. **TTS voice template first** — before narrating scenes, create a voice template (`POST /api/tts/templates`) and verify the voice. Use the template as `ref_audio` for voice cloning to ensure consistent narrator voice across all scenes. CPU-only (MPS produces gibberish).
 
 **Complete video_prompt example:**
 ```
@@ -239,23 +242,30 @@ ffmpeg -y -f concat -safe 0 -i concat.txt -c copy -movflags +faststart output.mp
 ## Full Pipeline Order
 
 ```
-1. Health check          GET  /health → extension_connected: true
-2. Create project        POST /api/projects (with entities)
-3. Create video          POST /api/videos
-4. Create scenes         POST /api/scenes (with character_names, chain_type)
-5. Gen ref images        POST /api/requests {type: GENERATE_CHARACTER_IMAGE} per entity
-   ↳ Wait ALL complete, verify all have media_id (UUID)
-6. Gen scene images      POST /api/requests {type: GENERATE_IMAGE} per scene
-   ↳ Wait ALL complete, verify vertical_image_media_id (UUID)
-7. Gen videos            POST /api/requests {type: GENERATE_VIDEO} per scene
-   ↳ Wait ALL complete (2-5 min each)
-8. (Optional) Upscale    POST /api/requests {type: UPSCALE_VIDEO} per scene
-9. Download + concat     ffmpeg normalize + concat
+1.  Health check          GET  /health → extension_connected: true
+2.  Create project        POST /api/projects (with entities + material)
+3.  Create video          POST /api/videos
+4.  Create scenes         POST /api/scenes (with character_names, chain_type, narrator_text)
+5.  Gen ref images        POST /api/requests {type: GENERATE_CHARACTER_IMAGE} per entity
+    ↳ BATCH 5 at a time, poll 10s, submit next 5 when done
+    ↳ Wait ALL complete, verify all have media_id (UUID)
+6.  Gen scene images      POST /api/requests {type: GENERATE_IMAGE} per scene
+    ↳ BATCH 5 at a time, poll 10s, submit next 5 when done
+    ↳ Wait ALL complete, verify image_media_id (UUID)
+7.  Gen videos            POST /api/requests {type: GENERATE_VIDEO} per scene
+    ↳ BATCH 5 at a time, poll 10s, submit next 5 when done (2-5 min each)
+8.  (Optional) Upscale    POST /api/requests {type: UPSCALE_VIDEO} per scene
+    ↳ BATCH 5 at a time (TIER_TWO only)
+9.  (Optional) TTS        Create voice template → POST /api/videos/{vid}/narrate
+    ↳ Requires narrator_text on scenes + voice template
+10. Download + concat     ffmpeg normalize + mix narration + concat
 ```
+
+**CRITICAL — Batch 5 rule:** Steps 5-8 MUST submit max 5 requests at a time. Poll every 10s. Submit next batch only after current batch completes. Submitting all at once causes stuck PROCESSING requests.
 
 **Between steps 5→6:** MUST verify every entity has `media_id`. If any is missing, scene image gen will block.
 
-**Between steps 6→7:** Verify `vertical_image_media_id` is UUID format for each scene.
+**Between steps 6→7:** Verify `image_media_id` is UUID format for each scene.
 
 ---
 

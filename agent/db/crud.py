@@ -30,7 +30,7 @@ _COLUMNS = {
               "horizontal_upscale_url", "horizontal_upscale_media_id", "horizontal_upscale_status",
               "vertical_end_scene_media_id", "horizontal_end_scene_media_id",
               "trim_start", "trim_end", "duration", "display_order", "source", "narrator_text", "updated_at"},
-    "request": {"status", "request_id", "media_id", "output_url", "error_message", "retry_count", "source_media_id", "updated_at"},
+    "request": {"status", "request_id", "media_id", "output_url", "error_message", "retry_count", "next_retry_at", "source_media_id", "updated_at"},
 }
 
 
@@ -242,6 +242,51 @@ async def list_pending_requests() -> list[dict]:
     db = await get_db()
     cur = await db.execute("SELECT * FROM request WHERE status='PENDING' ORDER BY created_at")
     return [dict(r) for r in await cur.fetchall()]
+
+
+async def list_actionable_requests(exclude_ids: set[str] = None, limit: int = 5) -> list[dict]:
+    """Priority-ordered fetch of PENDING requests ready to process."""
+    db = await get_db()
+    now = _now()
+    exclude = exclude_ids or set()
+
+    # Fetch all pending, filter in Python (SQLite doesn't support parameterized IN with variable length)
+    cur = await db.execute("""
+        SELECT * FROM request
+        WHERE status = 'PENDING'
+          AND (next_retry_at IS NULL OR next_retry_at <= ?)
+        ORDER BY
+          CASE type
+            WHEN 'GENERATE_CHARACTER_IMAGE' THEN 0
+            WHEN 'REGENERATE_CHARACTER_IMAGE' THEN 0
+            WHEN 'EDIT_CHARACTER_IMAGE' THEN 0
+            WHEN 'GENERATE_IMAGE' THEN 1
+            WHEN 'REGENERATE_IMAGE' THEN 1
+            WHEN 'EDIT_IMAGE' THEN 1
+            WHEN 'GENERATE_VIDEO' THEN 2
+            WHEN 'GENERATE_VIDEO_REFS' THEN 2
+            WHEN 'UPSCALE_VIDEO' THEN 3
+            ELSE 2
+          END,
+          created_at ASC
+    """, (now,))
+    rows = [dict(r) for r in await cur.fetchall()]
+    # Exclude in-flight IDs
+    filtered = [r for r in rows if r["id"] not in exclude]
+    return filtered[:limit]
+
+
+async def reset_stale_processing(cutoff_minutes: int = 10) -> int:
+    """Reset PROCESSING requests older than cutoff back to PENDING."""
+    db = await get_db()
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=cutoff_minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    async with _db_lock:
+        cursor = await db.execute(
+            "UPDATE request SET status='PENDING', error_message='reset: stale processing' WHERE status='PROCESSING' AND updated_at < ?",
+            (cutoff,))
+        await db.commit()
+        return cursor.rowcount
 
 
 # ─── Material ────────────────────────────────────────────────

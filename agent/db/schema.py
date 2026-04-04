@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS request (
     output_url    TEXT,
     error_message TEXT,
     retry_count   INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TEXT,
     edit_prompt   TEXT,    -- prompt for EDIT_IMAGE requests
     source_media_id TEXT,  -- source image media_id for EDIT_IMAGE requests
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
@@ -174,6 +175,15 @@ async def init_db():
         if "source_media_id" not in req_columns:
             await db.execute("ALTER TABLE request ADD COLUMN source_media_id TEXT")
             logger.info("Migrated: added source_media_id column to request table")
+        # Migration: add queue columns to request table
+        cursor = await db.execute("PRAGMA table_info(request)")
+        request_columns = {row[1] for row in await cursor.fetchall()}
+        if "next_retry_at" not in request_columns:
+            await db.execute("ALTER TABLE request ADD COLUMN next_retry_at TEXT")
+            logger.info("Migrated: added next_retry_at column to request table")
+        if "retry_count" not in request_columns:
+            await db.execute("ALTER TABLE request ADD COLUMN retry_count INTEGER DEFAULT 0")
+            logger.info("Migrated: added retry_count column to request table")
         # Migration: ensure request table CHECK constraint includes all request types
         # SQLite can't alter CHECK constraints, so recreate the table
         cursor = await db.execute("SELECT sql FROM sqlite_master WHERE name='request' AND type='table'")
@@ -203,6 +213,7 @@ CREATE TABLE IF NOT EXISTS request (
     output_url    TEXT,
     error_message TEXT,
     retry_count   INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TEXT,
     edit_prompt   TEXT,
     source_media_id TEXT,
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),

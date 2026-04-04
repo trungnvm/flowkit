@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import signal
 from contextlib import asynccontextmanager
 
 import websockets
@@ -19,7 +20,7 @@ from agent.api.flow import router as flow_router
 from agent.api.reviews import router as reviews_router
 from agent.api.tts import router as tts_router
 from agent.api.materials import router as materials_router
-from agent.worker.processor import process_pending_requests
+from agent.worker.processor import get_worker_controller
 from agent.services.flow_client import get_flow_client
 from agent.sdk import init_sdk
 
@@ -80,13 +81,21 @@ async def lifespan(app: FastAPI):
     logger.info("SDK initialized (OperationService ready)")
     logger.info("Google Flow Agent starting on %s:%d", API_HOST, API_PORT)
 
+    controller = get_worker_controller()
+
+    # SIGTERM handler for graceful shutdown
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGTERM, controller.request_shutdown)
+
     # Start background tasks
     ws_task = asyncio.create_task(run_ws_server())
-    worker_task = asyncio.create_task(process_pending_requests())
+    worker_task = asyncio.create_task(controller.start())
     logger.info("WS server + worker started")
 
     yield
 
+    controller.request_shutdown()
+    await controller.drain()
     ws_task.cancel()
     worker_task.cancel()
     await close_db()

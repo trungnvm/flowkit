@@ -19,51 +19,138 @@ from agent.sdk.services.result_handler import parse_result, apply_scene_result, 
 
 logger = logging.getLogger(__name__)
 
-_retry_state: dict[str, tuple[int, float]] = {}
-
 _API_CALL_TYPES = {"GENERATE_IMAGE", "REGENERATE_IMAGE", "EDIT_IMAGE",
                    "GENERATE_VIDEO", "GENERATE_VIDEO_REFS", "UPSCALE_VIDEO",
                    "GENERATE_CHARACTER_IMAGE", "REGENERATE_CHARACTER_IMAGE",
                    "EDIT_CHARACTER_IMAGE"}
 
+_TYPE_PRIORITY = {
+    "GENERATE_CHARACTER_IMAGE": 0, "REGENERATE_CHARACTER_IMAGE": 0, "EDIT_CHARACTER_IMAGE": 0,
+    "GENERATE_IMAGE": 1, "REGENERATE_IMAGE": 1, "EDIT_IMAGE": 1,
+    "GENERATE_VIDEO": 2, "GENERATE_VIDEO_REFS": 2,
+    "UPSCALE_VIDEO": 3,
+}
 
-async def process_pending_requests():
-    """Main worker loop — dispatches pending requests concurrently."""
-    client = get_flow_client()
-    active: set[str] = set()
-    deferred: dict[str, float] = {}  # rid -> defer_until timestamp
 
-    while True:
+class APIRateLimiter:
+    """Enforces max concurrent requests AND minimum gap between API calls."""
+    def __init__(self, max_concurrent: int, cooldown_seconds: float):
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._cooldown = cooldown_seconds
+        self._last_call = 0.0
+        self._gate = asyncio.Lock()
+
+    async def acquire(self):
+        await self._semaphore.acquire()
+        async with self._gate:
+            elapsed = time.monotonic() - self._last_call
+            if elapsed < self._cooldown:
+                await asyncio.sleep(self._cooldown - elapsed)
+            self._last_call = time.monotonic()
+
+    def release(self):
+        self._semaphore.release()
+
+
+class WorkerController:
+    """Controls the background worker loop with rate limiting and graceful shutdown."""
+
+    def __init__(self):
+        self._shutdown = asyncio.Event()
+        self._active_ids: set[str] = set()
+        self._rate_limiter = APIRateLimiter(MAX_CONCURRENT_REQUESTS, API_COOLDOWN)
+        self._deferred: dict[str, float] = {}  # rid -> defer_until timestamp
+        self._retry_after: dict[str, float] = {}  # rid -> retry_after timestamp
+
+    async def start(self):
+        """Start the worker loop."""
+        await self._cleanup_stale_processing()
+        await self._run_loop()
+
+    def request_shutdown(self):
+        """Signal the worker to stop after current tasks drain."""
+        self._shutdown.set()
+
+    async def drain(self):
+        """Wait until all active tasks complete."""
+        while self._active_ids:
+            await asyncio.sleep(0.5)
+
+    async def _cleanup_stale_processing(self):
+        """Reset any requests stuck in PROCESSING state from a previous run."""
         try:
-            if not client.connected:
-                await asyncio.sleep(POLL_INTERVAL)
-                continue
-            now = time.time()
-            pending = await crud.list_pending_requests()
-            if pending and not active:
-                logger.info("Worker: %d pending, %d active, picking up...", len(pending), len(active))
-            for req in pending:
-                rid = req["id"]
-                # Skip recently deferred requests
-                if rid in deferred and deferred[rid] > now:
-                    continue
-                deferred.pop(rid, None)
-                if rid not in active and len(active) < MAX_CONCURRENT_REQUESTS:
-                    active.add(rid)
-                    asyncio.create_task(_tracked(req, active, deferred))
-            # Prune stale deferred entries for requests no longer pending
-            pending_ids = {r["id"] for r in pending}
-            deferred = {k: v for k, v in deferred.items() if k in pending_ids}
+            stale = await crud.list_requests(status="PROCESSING")
+            for req in stale:
+                await crud.update_request(req["id"], status="PENDING",
+                                          error_message="reset: stale PROCESSING on startup")
+                logger.warning("Stale request reset: %s type=%s", req["id"][:8], req.get("type"))
+            if stale:
+                logger.info("Cleaned up %d stale PROCESSING requests", len(stale))
         except Exception as e:
-            logger.exception("Worker loop error: %s", e)
-        await asyncio.sleep(POLL_INTERVAL)
+            logger.warning("Could not clean up stale requests: %s", e)
 
+    async def _run_loop(self):
+        client = get_flow_client()
 
-async def _tracked(req: dict, active: set, deferred: dict):
-    try:
-        await _process_one(req, deferred)
-    finally:
-        active.discard(req["id"])
+        while not self._shutdown.is_set():
+            try:
+                if not client.connected:
+                    await asyncio.sleep(POLL_INTERVAL)
+                    continue
+
+                now = time.time()
+                pending = await crud.list_pending_requests()
+
+                # Sort by priority
+                pending.sort(key=lambda r: _TYPE_PRIORITY.get(r.get("type", ""), 99))
+
+                slots_available = MAX_CONCURRENT_REQUESTS - len(self._active_ids)
+                if pending and slots_available > 0:
+                    logger.info("Worker: %d pending, %d active, %d slots",
+                                len(pending), len(self._active_ids), slots_available)
+
+                for req in pending:
+                    if slots_available <= 0:
+                        break
+                    rid = req["id"]
+
+                    # Skip in-flight
+                    if rid in self._active_ids:
+                        continue
+
+                    # Skip recently deferred (prereq or retry cooldown)
+                    if rid in self._deferred and self._deferred[rid] > now:
+                        continue
+                    self._deferred.pop(rid, None)
+
+                    # Skip if retry backoff not elapsed
+                    if rid in self._retry_after and self._retry_after[rid] > now:
+                        continue
+
+                    self._active_ids.add(rid)
+                    slots_available -= 1
+                    asyncio.create_task(self._run_one(req))
+
+                # Prune stale deferred/retry entries for requests no longer pending
+                pending_ids = {r["id"] for r in pending}
+                self._deferred = {k: v for k, v in self._deferred.items() if k in pending_ids}
+                self._retry_after = {k: v for k, v in self._retry_after.items() if k in pending_ids}
+
+            except Exception as e:
+                logger.exception("Worker loop error: %s", e)
+
+            await asyncio.sleep(POLL_INTERVAL)
+
+    async def _run_one(self, req: dict):
+        rid = req["id"]
+        try:
+            await self._rate_limiter.acquire()
+            try:
+                await _process_one(req, self._deferred, self._retry_after)
+            finally:
+                self._rate_limiter.release()
+        finally:
+            self._active_ids.discard(rid)
 
 
 async def _prerequisites_met(req: dict, orientation: str) -> bool:
@@ -107,7 +194,7 @@ async def _prerequisites_met(req: dict, orientation: str) -> bool:
     return True
 
 
-async def _process_one(req: dict, deferred: dict = None):
+async def _process_one(req: dict, deferred: dict = None, retry_after: dict = None):
     rid, req_type = req["id"], req["type"]
     orientation = req.get("orientation", "VERTICAL")
 
@@ -125,13 +212,10 @@ async def _process_one(req: dict, deferred: dict = None):
     logger.info("Processing request %s type=%s", rid[:8], req_type)
     await crud.update_request(rid, status="PROCESSING")
 
-    if req_type in _API_CALL_TYPES and API_COOLDOWN > 0:
-        await asyncio.sleep(API_COOLDOWN)
-
     try:
         result = await _dispatch(req, orientation)
         if _is_error(result):
-            await _handle_failure(rid, req, result)
+            await _handle_failure(rid, req, result, retry_after)
         else:
             gen_result = parse_result(result, req_type)
             await crud.update_request(rid, status="COMPLETED", media_id=gen_result.media_id, output_url=gen_result.url)
@@ -144,7 +228,7 @@ async def _process_one(req: dict, deferred: dict = None):
             logger.info("Request %s COMPLETED: media=%s", rid[:8], gen_result.media_id[:20] if gen_result.media_id else "?")
     except Exception as e:
         logger.exception("Request %s exception: %s", rid[:8], e)
-        await _handle_failure(rid, req, {"error": str(e)})
+        await _handle_failure(rid, req, {"error": str(e)}, retry_after)
 
 
 async def _dispatch(req: dict, orientation: str) -> dict:
@@ -269,7 +353,7 @@ async def _recover_entity_not_found(req: dict) -> bool:
     return False
 
 
-async def _handle_failure(rid: str, req: dict, result: dict):
+async def _handle_failure(rid: str, req: dict, result: dict, retry_after: dict = None):
     error_msg = result.get("error")
     if not error_msg:
         data = result.get("data", {})
@@ -306,11 +390,12 @@ async def _handle_failure(rid: str, req: dict, result: dict):
 
     retry = req.get("retry_count", 0) + 1
     if retry < MAX_RETRIES:
-        _, retry_after = _retry_state.get(rid, (0, 0.0))
         now = time.time()
-        if retry_after > now:
-            return
-        _retry_state[rid] = (retry, now + min(2 ** retry * 10, 300))
+        if retry_after is not None:
+            ra = retry_after.get(rid, 0.0)
+            if ra > now:
+                return
+            retry_after[rid] = now + min(2 ** retry * 10, 300)
         await crud.update_request(rid, status="PENDING", retry_count=retry, error_message=str(error_msg))
         logger.warning("Request %s failed (retry %d/%d): %s", rid[:8], retry, MAX_RETRIES, error_msg)
     else:
@@ -356,3 +441,13 @@ async def _is_already_completed(req: dict, orientation: str) -> bool:
     return False
 
 
+# ─── Module-level controller ──────────────────────────────────
+
+_controller: WorkerController | None = None
+
+
+def get_worker_controller() -> WorkerController:
+    global _controller
+    if _controller is None:
+        _controller = WorkerController()
+    return _controller

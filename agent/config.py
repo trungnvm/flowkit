@@ -70,12 +70,30 @@ REVIEW_FPS_LIGHT = float(os.environ.get("REVIEW_FPS_LIGHT", "4"))
 REVIEW_FPS_DEEP = float(os.environ.get("REVIEW_FPS_DEEP", "8"))
 REVIEW_MAX_FRAMES = int(os.environ.get("REVIEW_MAX_FRAMES", "64"))
 
-# ─── Suno (Music Generation) ────────────────────────────────
-SUNO_API_KEY = os.environ.get("SUNO_API_KEY", "")
-SUNO_BASE_URL = os.environ.get("SUNO_BASE_URL", "https://studio-api.suno.ai")
-SUNO_MODEL = os.environ.get("SUNO_MODEL", "chirp-v4")
+# ─── Suno (Music Generation) — sunoapi.org ──────────────────
+def _load_suno_key() -> str:
+    """Load Suno API key: env var first, then channel_rules.json fallback."""
+    key = os.environ.get("SUNO_API_KEY", "")
+    if key:
+        return key
+    channels_dir = BASE_DIR / "youtube" / "channels"
+    if channels_dir.exists():
+        for rules_file in channels_dir.glob("*/channel_rules.json"):
+            try:
+                rules = json.loads(rules_file.read_text())
+                key = rules.get("api_keys", {}).get("suno", "")
+                if key:
+                    return key
+            except (json.JSONDecodeError, OSError):
+                continue
+    return ""
+
+SUNO_API_KEY = _load_suno_key()
+SUNO_BASE_URL = os.environ.get("SUNO_BASE_URL", "https://api.sunoapi.org")
+SUNO_MODEL = os.environ.get("SUNO_MODEL", "V4")
+SUNO_CALLBACK_URL = os.environ.get("SUNO_CALLBACK_URL", f"http://{API_HOST}:{API_PORT}/api/music/callback")
 SUNO_POLL_INTERVAL = int(os.environ.get("SUNO_POLL_INTERVAL", "5"))
-SUNO_POLL_TIMEOUT = int(os.environ.get("SUNO_POLL_TIMEOUT", "300"))
+SUNO_POLL_TIMEOUT = int(os.environ.get("SUNO_POLL_TIMEOUT", "600"))
 
 # ─── Header Randomization Pools ─────────────────────────────
 USER_AGENTS = [

@@ -1,14 +1,14 @@
 Review AI-generated scene videos for quality using Claude Vision.
 
-Usage: `/gla:review-video <video_id> [--mode light|deep] [--orientation VERTICAL|HORIZONTAL]`
+Usage: `/gla:review-video <video_id> [--mode light|deep]`
 
-Default mode: `light`. Default orientation: `VERTICAL`.
+Default mode: `light`. Orientation auto-detected from project `meta.json`.
 
 ## Prerequisites
 
 - `ANTHROPIC_API_KEY` env var set
 - `ffmpeg` + `ffprobe` installed
-- Scenes must have completed videos (`vertical_video_status = COMPLETED`)
+- Scenes must have completed videos (`${ori}_video_status = COMPLETED`)
 
 ## Step 1: Pre-check
 
@@ -29,19 +29,19 @@ curl -s http://127.0.0.1:8100/api/videos/<VID>
 curl -s "http://127.0.0.1:8100/api/scenes?video_id=<VID>"
 ```
 
-For each scene, verify `vertical_video_status = COMPLETED` (or `horizontal_video_status` if using HORIZONTAL orientation).
+For each scene, verify `${ori}_video_status = COMPLETED` (orientation auto-detected from meta.json).
 
 **ABORT** if any scene is missing a completed video — tell user to run `/gla:gen-videos` first.
 
 ## Step 3: Run review via API
 
 ```bash
-curl -X POST "http://127.0.0.1:8100/api/videos/<VID>/review?project_id=<PID>&mode=light&orientation=VERTICAL"
+curl -X POST "http://127.0.0.1:8100/api/videos/<VID>/review?project_id=<PID>&mode=light&orientation=${ORI}"
 ```
 
 **Parameters:**
 - `mode`: `light` (default) or `deep`
-- `orientation`: `VERTICAL` (default) or `HORIZONTAL`
+- `orientation`: auto-detected from meta.json (`${ORI}`)
 
 The API will extract frames from each scene video, send them to Claude Vision, and return per-scene quality scores.
 
@@ -114,7 +114,7 @@ Regenerate the scene image first, then the video:
 # Force-regenerate scene image (cascades video + upscale)
 curl -X POST http://127.0.0.1:8100/api/requests \
   -H "Content-Type: application/json" \
-  -d '{"type": "REGENERATE_IMAGE", "scene_id": "<SID>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"}'
+  -d '{"type": "REGENERATE_IMAGE", "scene_id": "<SID>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"}'
 ```
 Then run `/gla:gen-videos <PID> <VID>` after image is complete.
 
@@ -127,7 +127,7 @@ Note `usable_segments` time ranges for manual editing. Use `/gla:concat` and tri
   ```bash
   curl -X POST http://127.0.0.1:8100/api/requests \
     -H "Content-Type: application/json" \
-    -d '{"type": "EDIT_IMAGE", "scene_id": "<SID>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"}'
+    -d '{"type": "EDIT_IMAGE", "scene_id": "<SID>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"}'
   ```
 
 ### After fixes

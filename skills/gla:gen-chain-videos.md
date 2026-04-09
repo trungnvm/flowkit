@@ -22,36 +22,36 @@ The `endImage` is the PARENT scene's image — the video smoothly transitions fr
 curl -s "http://127.0.0.1:8100/api/scenes?video_id=<VID>"
 ```
 
-ABORT if any scene is missing `vertical_image_media_id` (UUID).
+ABORT if any scene is missing `${ori}_image_media_id` (UUID).
 
 ## Step 2: Set up end_scene_media_ids for chaining
 
-For each CONTINUATION scene, set its `vertical_end_scene_media_id` to its parent scene's `vertical_image_media_id`:
+For each CONTINUATION scene, set its `${ori}_end_scene_media_id` to its parent scene's `${ori}_image_media_id`:
 
 ```bash
 curl -X PATCH http://127.0.0.1:8100/api/scenes/<SID> \
   -H "Content-Type: application/json" \
-  -d '{"vertical_end_scene_media_id": "<parent_scene_image_media_id>"}'
+  -d '{"${ori}_end_scene_media_id": "<parent_scene_image_media_id>"}'
 ```
 
 Logic:
 1. Sort scenes by `display_order`
 2. For each scene with `chain_type: "CONTINUATION"` and `parent_scene_id`:
    - Look up parent scene
-   - Set `vertical_end_scene_media_id` = parent's `vertical_image_media_id`
-3. ROOT scenes and the last scene: no endImage (leave `vertical_end_scene_media_id` null)
+   - Set `${ori}_end_scene_media_id` = parent's `${ori}_image_media_id`
+3. ROOT scenes and the last scene: no endImage (leave `${ori}_end_scene_media_id` null)
 
 ## Step 3: Submit ALL video requests at once
 
-The server handles throttling automatically (max 5 concurrent, 10s cooldown). The worker reads `vertical_end_scene_media_id` from each scene (set in Step 2) and passes it as `endImage` to the API. This triggers `start_end_frame_2_video` (i2v_fl) instead of plain `frame_2_video` (i2v).
+The server handles throttling automatically (max 5 concurrent, 10s cooldown). The worker reads `${ori}_end_scene_media_id` from each scene (set in Step 2) and passes it as `endImage` to the API. This triggers `start_end_frame_2_video` (i2v_fl) instead of plain `frame_2_video` (i2v).
 
 ```bash
 curl -X POST http://127.0.0.1:8100/api/requests/batch \
   -H "Content-Type: application/json" \
   -d '{
     "requests": [
-      {"type": "GENERATE_VIDEO", "scene_id": "<SID1>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"},
-      {"type": "GENERATE_VIDEO", "scene_id": "<SID2>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"}
+      {"type": "GENERATE_VIDEO", "scene_id": "<SID1>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"},
+      {"type": "GENERATE_VIDEO", "scene_id": "<SID2>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"}
     ]
   }'
 ```

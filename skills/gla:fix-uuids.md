@@ -19,14 +19,15 @@ If it starts with `CAMS` or doesn't match UUID pattern:
 curl -s "http://127.0.0.1:8100/api/scenes?video_id=<VID>"
 ```
 
+Detect orientation from project `meta.json` (`${ori}` = `horizontal` or `vertical`).
+
 For each scene, check these fields:
-- `vertical_image_media_id`
-- `vertical_video_media_id`
-- `vertical_upscale_media_id`
-- (same for horizontal_*)
+- `${ori}_image_media_id`
+- `${ori}_video_media_id`
+- `${ori}_upscale_media_id`
 
 If any starts with `CAMS` or doesn't match UUID:
-- Extract UUID from the corresponding URL field (`vertical_image_url`, `vertical_video_url`, etc.)
+- Extract UUID from the corresponding URL field (`${ori}_image_url`, `${ori}_video_url`, etc.)
 - URL format: `https://storage.googleapis.com/ai-sandbox-videofx/{type}/{UUID}?...`
 - Patch: `PATCH /api/scenes/<SID>` with `{"<field>": "<extracted_uuid>"}`
 

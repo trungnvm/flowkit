@@ -4,6 +4,16 @@ Usage: `/gla:gen-images <project_id> <video_id>`
 
 If not provided, ask or list projects/videos.
 
+## Step 0: Detect orientation
+
+```bash
+PROJ_OUT=$(curl -s http://127.0.0.1:8100/api/projects/<PID>/output-dir)
+OUTDIR=$(echo "$PROJ_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['path'])")
+ORI=$(cat ${OUTDIR}/meta.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','HORIZONTAL'))")
+ori=$(echo "$ORI" | tr '[:upper:]' '[:lower:]')
+```
+**NEVER hardcode VERTICAL or HORIZONTAL.** Use `${ORI}` for API params, `${ori}_*` for DB field lookups.
+
 ## Step 1: Pre-check — all references must be ready
 
 ```bash
@@ -18,7 +28,7 @@ curl -s http://127.0.0.1:8100/api/projects/<PID>/characters
 curl -s "http://127.0.0.1:8100/api/scenes?video_id=<VID>"
 ```
 
-Filter to scenes where `vertical_image_status` != `"COMPLETED"` or `vertical_image_media_id` is missing/not UUID.
+Filter to scenes where `${ori}_image_status` != `"COMPLETED"` or `${ori}_image_media_id` is missing/not UUID.
 
 ## Step 3: Submit ALL requests at once
 
@@ -29,8 +39,8 @@ curl -X POST http://127.0.0.1:8100/api/requests/batch \
   -H "Content-Type: application/json" \
   -d '{
     "requests": [
-      {"type": "GENERATE_IMAGE", "scene_id": "<SID1>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"},
-      {"type": "GENERATE_IMAGE", "scene_id": "<SID2>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"}
+      {"type": "GENERATE_IMAGE", "scene_id": "<SID1>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"},
+      {"type": "GENERATE_IMAGE", "scene_id": "<SID2>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"}
     ]
   }'
 ```
@@ -52,12 +62,12 @@ After all complete, check each scene:
 curl -s "http://127.0.0.1:8100/api/scenes?video_id=<VID>"
 ```
 
-If any `vertical_image_media_id` starts with `CAMS` or is not UUID format, fix it by extracting UUID from `vertical_image_url`:
+If any `${ori}_image_media_id` starts with `CAMS` or is not UUID format, fix it by extracting UUID from `${ori}_image_url`:
 ```bash
 # Extract UUID from URL path: /image/{UUID}?...
 curl -X PATCH http://127.0.0.1:8100/api/scenes/<SID> \
   -H "Content-Type: application/json" \
-  -d '{"vertical_image_media_id": "<extracted_uuid>"}'
+  -d '{"${ori}_image_media_id": "<extracted_uuid>"}'
 ```
 
 ## Step 5: Output

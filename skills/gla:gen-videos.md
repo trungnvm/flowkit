@@ -2,17 +2,27 @@ Generate videos for all scenes in a video.
 
 Usage: `/gla:gen-videos <project_id> <video_id>`
 
+## Step 0: Detect orientation
+
+```bash
+PROJ_OUT=$(curl -s http://127.0.0.1:8100/api/projects/<PID>/output-dir)
+OUTDIR=$(echo "$PROJ_OUT" | python3 -c "import sys,json; print(json.load(sys.stdin)['path'])")
+ORI=$(cat ${OUTDIR}/meta.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('orientation','HORIZONTAL'))")
+ori=$(echo "$ORI" | tr '[:upper:]' '[:lower:]')
+```
+**NEVER hardcode VERTICAL or HORIZONTAL.** Use `${ORI}` for API params, `${ori}_*` for DB field lookups.
+
 ## Step 1: Pre-check — all scene images must be ready
 
 ```bash
 curl -s "http://127.0.0.1:8100/api/scenes?video_id=<VID>"
 ```
 
-**ABORT** if any scene is missing `vertical_image_media_id` (UUID) or `vertical_image_status` != `"COMPLETED"`. Tell user to run `/gla:gen-images` first.
+**ABORT** if any scene is missing `${ori}_image_media_id` (UUID) or `${ori}_image_status` != `"COMPLETED"`. Tell user to run `/gla:gen-images` first.
 
 ## Step 2: Filter scenes needing video
 
-Only scenes where `vertical_video_status` != `"COMPLETED"` or `vertical_video_media_id` is missing.
+Only scenes where `${ori}_video_status` != `"COMPLETED"` or `${ori}_video_media_id` is missing.
 
 ## Step 3: Submit ALL requests at once
 
@@ -23,8 +33,8 @@ curl -X POST http://127.0.0.1:8100/api/requests/batch \
   -H "Content-Type: application/json" \
   -d '{
     "requests": [
-      {"type": "GENERATE_VIDEO", "scene_id": "<SID1>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"},
-      {"type": "GENERATE_VIDEO", "scene_id": "<SID2>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "VERTICAL"}
+      {"type": "GENERATE_VIDEO", "scene_id": "<SID1>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"},
+      {"type": "GENERATE_VIDEO", "scene_id": "<SID2>", "project_id": "<PID>", "video_id": "<VID>", "orientation": "${ORI}"}
     ]
   }'
 ```

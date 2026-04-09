@@ -9,7 +9,7 @@ This skill analyzes existing scenes and suggests creative enhancements using all
 ### T1: Scene Chaining (i2v_fl)
 Smooth transitions between scenes using start+end frames.
 - **When:** Sequential scenes that should flow into each other
-- **How:** Set `vertical_end_scene_media_id` on CONTINUATION scenes
+- **How:** Set `${ori}_end_scene_media_id` on CONTINUATION scenes
 
 ### T2: Multi-angle Breakdown (the killer technique)
 Explode ONE moment into multiple camera angles — like a real film director cutting between shots. Use `EDIT_IMAGE` on the parent scene's image to create new perspectives while keeping character/environment consistency via refs.

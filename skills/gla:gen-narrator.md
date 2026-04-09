@@ -32,11 +32,15 @@ Voice consistency requires a template — without it, each scene sounds differen
 
 If templates exist, list them and ask user which to use (or default to the first one).
 
-Also check for `ref_audio` files:
+Also check for YouTube channel voice templates:
 ```bash
-ls output/_shared/tts_templates/voice_template_*.wav 2>/dev/null
+# Check YouTube channel for voice files (preferred source for channel-specific voice)
+ls youtube/channels/*/voice_template*.wav 2>/dev/null
+# Check shared templates
+ls output/_shared/tts_templates/*.wav 2>/dev/null
 ```
 
+**Priority:** YouTube channel voice template > shared template > user-specified ref_audio.
 User can specify a template name OR a ref_audio path directly.
 
 ## Step 3: Generate narrator text for each scene
@@ -62,22 +66,24 @@ At 1.1x speed: Vietnamese ~5.5 words/sec, English ~4.5 words/sec.
 
 **Word count limits (HARD MAX — never exceed):**
 
+Voice is trained at 1.2x speed, fast style. These limits fit within 8s video (7s usable after `-ss 1` trim).
+
 | Language | Max Words | ~Duration | Words/sec | Notes |
 |----------|-----------|-----------|-----------|-------|
-| Vietnamese | 20 | ~5s | ~4.0 | Tonal, many monosyllabic words but diacritics slow TTS |
-| English | 20 | ~5s | ~4.0 | Standard baseline |
-| Japanese | 30 | ~5s | ~6.0 | Short words, particles add up fast (は、を、に) |
-| Korean | 20 | ~5s | ~4.0 | Agglutinative, long compound words = fewer needed |
-| Thai | 22 | ~5s | ~4.5 | Tonal like Vietnamese, no spaces between words |
-| Chinese (ZH) | 25 | ~5s | ~5.0 | Each character = 1 syllable, very dense |
-| Spanish | 22 | ~5s | ~4.5 | Slightly faster than English |
-| French | 22 | ~5s | ~4.5 | Liaison makes speech flow faster |
-| Arabic | 18 | ~5s | ~3.5 | Long words, formal style = slower delivery |
-| Hindi | 20 | ~5s | ~4.0 | Compound verbs take time |
+| Vietnamese | 22 | ~6.5s | ~3.5 | Tonal, diacritics slow TTS. 2-3 punchy sentences |
+| English | 22 | ~6.5s | ~3.5 | Standard baseline |
+| Japanese | 33 | ~6.5s | ~5.0 | Short words, particles add up fast (は、を、に) |
+| Korean | 22 | ~6.5s | ~3.5 | Agglutinative, long compound words = fewer needed |
+| Thai | 24 | ~6.5s | ~3.8 | Tonal like Vietnamese, no spaces between words |
+| Chinese (ZH) | 28 | ~6.5s | ~4.3 | Each character = 1 syllable, very dense |
+| Spanish | 24 | ~6.5s | ~3.8 | Slightly faster than English |
+| French | 24 | ~6.5s | ~3.8 | Liaison makes speech flow faster |
+| Arabic | 20 | ~6.5s | ~3.0 | Long words, formal style = slower delivery |
+| Hindi | 22 | ~6.5s | ~3.5 | Compound verbs take time |
 
-**Why strict?** TTS duration varies — same word count can produce 5s or 8s depending on syllables, pauses, and voice. Keep conservative so TTS stays under 7s. If narrator is longer than video, it gets cut off mid-sentence.
+**Why strict?** TTS at 1.2x speed — 22 Vietnamese words ≈ 6.5s. Usable video = 7s after `-ss 1` trim. Over 22 words risks cut-off mid-sentence. Under 18 words = dead air.
 
-**Rule of thumb for unlisted languages:** MAX 20 words. Adjust down for languages with long compound words (German, Finnish), adjust up for languages with short particles (Japanese, Chinese).
+**Rule of thumb for unlisted languages:** MAX 22 words. Adjust down for languages with long compound words (German, Finnish), adjust up for languages with short particles (Japanese, Chinese).
 
 **Documentary narrator style:**
 
@@ -92,21 +98,21 @@ DO:
 DON'T:
 - Describe what's visually obvious: "We see a ship sailing" (viewer sees it)
 - Use filler phrases: "In this scene...", "Meanwhile...", "As we can see..."
-- Exceed word count (too long = rushed speech, bad audio)
-- Be too short (< 15 words = dead air, awkward silence)
+- Exceed word count (too long = cut off mid-sentence at 8s)
+- Be too short (< 18 words = dead air, awkward silence)
 - Use passive voice: "The ship was attacked" → "Iran attacked the ship"
 
 ### Example (military documentary, Vietnamese):
 
 Scene video_prompt: `0-3s: Captain Harris stands on the bridge scanning the horizon. 3-6s: Radar shows multiple fast contacts approaching. 6-8s: Captain grabs radio and orders battle stations.`
 
-narrator_text: `Đại tá Harris phát hiện tín hiệu radar bất thường. Hàng chục tàu cao tốc Iran đang lao thẳng về phía đoàn hộ tống. Ông ra lệnh chiến đấu.`
-(31 words, ~5.5s at 1.1x, adds context about Iran + convoy not visible in scene)
+narrator_text: `Đại tá Harris phát hiện tín hiệu radar bất thường. Hàng chục tàu cao tốc Iran lao thẳng về phía đoàn hộ tống.`
+(20 words, ~6s at 1.2x, adds Iran + convoy context not visible in scene)
 
 ### Example (military documentary, English):
 
-narrator_text: `Captain Harris spots unusual radar signatures. Dozens of Iranian fast boats are racing straight toward the convoy. He orders battle stations.`
-(21 words, ~5s at 1.1x)
+narrator_text: `Colonel Harris detects unusual radar signatures. Dozens of Iranian fast boats racing toward the convoy.`
+(15 words, ~5s at 1.2x — adds Iran context, punchy)
 
 ## Step 4: Save narrator_text to each scene
 
@@ -125,11 +131,11 @@ Print a table:
 ```
 Scene | Words | Est. Duration | Narrator Text
 ------|-------|---------------|---------------
-  000 |    31 |         5.5s  | Đại tá Harris phát hiện tín hiệu...
-  001 |    28 |         5.0s  | Tàu dầu Meridian Star nặng nề...
-  002 |    33 |         5.8s  | Eo biển Hormuz — nơi 20% dầu mỏ...
+  000 |    20 |         6.0s  | Đại tá Harris phát hiện tín hiệu radar...
+  001 |    22 |         6.5s  | Tàu dầu Meridian Star nặng nề tiến...
+  002 |    19 |         5.5s  | Eo biển Hormuz — 20% dầu thế giới...
   ...
-Total: 40 scenes, ~1200 words, ~210s narration
+Total: 40 scenes, ~800 words, ~260s narration
 ```
 
 Ask user: "Review OK? Type 'yes' to generate TTS, or 'edit N' to modify scene N's text."
@@ -232,8 +238,8 @@ When writing narrator text for 30-40 scenes, follow a narrative arc:
 | Issue | Cause | Fix |
 |-------|-------|-----|
 | TTS sounds different each scene | No voice template | Run /gla:gen-tts-template first |
-| Narrator text too long | Exceeds word count | Keep under 35 VN / 30 EN words |
-| Dead air in scene | Narrator text too short | Aim for 25+ VN / 20+ EN words |
+| Narrator text too long | Exceeds word count | Keep under 22 VN / 22 EN words |
+| Dead air in scene | Narrator text too short | Aim for 18+ VN / 18+ EN words |
 | Wrong language | Didn't match project language | Use --language flag or check project.language |
 | TTS files not found by concat | Wrong output path | Copy to ${OUTDIR}/tts/ |
 | Narrator describes visuals | Bad writing style | Remove "we see", describe context/stakes instead |

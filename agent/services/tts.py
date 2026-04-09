@@ -11,8 +11,8 @@ from agent.config import TTS_MODEL, TTS_SAMPLE_RATE
 
 logger = logging.getLogger(__name__)
 
-# Default to system python3; override with TTS_PYTHON_BIN if needed
-PYTHON_BIN = os.environ.get("TTS_PYTHON_BIN", "python3")
+# Default to python3.10 (has torch/torchaudio/omnivoice); override with TTS_PYTHON_BIN if needed
+PYTHON_BIN = os.environ.get("TTS_PYTHON_BIN", "python3.10")
 
 # Inline script template for TTS generation via subprocess
 _TTS_SCRIPT = """

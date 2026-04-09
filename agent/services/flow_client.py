@@ -422,7 +422,7 @@ class FlowClient:
         request = {
             "aspectRatio": aspect_ratio,
             "seed": int(time.time()) % 10000,
-            "textInput": {"prompt": prompt},
+            "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
             "videoModelKey": model_key,
             "startImage": {"mediaId": start_image_media_id},
             "metadata": {"sceneId": scene_id},
@@ -433,8 +433,10 @@ class FlowClient:
 
         endpoint_key = "generate_video_start_end" if end_image_media_id else "generate_video"
         body = {
+            "mediaGenerationContext": {"batchId": f"{uuid.uuid4()}"},
             "clientContext": self._client_context(project_id, user_paygate_tier),
             "requests": [request],
+            "useV2ModelConfig": True,
         }
 
         url = self._build_url(endpoint_key)
@@ -467,7 +469,7 @@ class FlowClient:
         request = {
             "aspectRatio": aspect_ratio,
             "seed": int(time.time()) % 10000,
-            "textInput": {"prompt": prompt},
+            "textInput": {"structuredPrompt": {"parts": [{"text": prompt}]}},
             "videoModelKey": model_key,
             "referenceImages": [
                 {"mediaId": mid, "imageUsageType": "IMAGE_USAGE_TYPE_ASSET"}
@@ -477,8 +479,10 @@ class FlowClient:
         }
 
         body = {
+            "mediaGenerationContext": {"batchId": f"{uuid.uuid4()}"},
             "clientContext": self._client_context(project_id, user_paygate_tier),
             "requests": [request],
+            "useV2ModelConfig": True,
         }
 
         url = self._build_url("generate_video_references")

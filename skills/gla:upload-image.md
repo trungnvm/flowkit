@@ -63,7 +63,7 @@ curl -s -X PATCH http://127.0.0.1:8100/api/scenes/<SCENE_ID> \
     "horizontal_image_status": "COMPLETED"
   }'
 ```
-(Use `vertical_image_media_id` / `vertical_image_status` for portrait.)
+(Use `${ori}_image_media_id` / `${ori}_image_status` matching project orientation.)
 
 ### Option C: Create new entity with uploaded image
 

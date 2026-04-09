@@ -192,52 +192,18 @@ class FlowClient:
             await event_bus.emit("urls_refreshed", {"count": updated})
 
     async def refresh_project_urls(self, project_id: str) -> dict:
-        """Call Google Flow TRPC to get fresh signed URLs for all media in a project.
+        """Refresh media URLs for a project.
 
-        Tries flow.getFlow TRPC endpoint, extracts all GCS signed URLs,
-        and updates scenes/characters in DB.
+        Note: Google Flow's get_media API returns encoded content (base64),
+        not fresh signed URLs. URL refresh requires TRPC intercept from
+        the extension when the user opens the project in Chrome.
+        The video reviewer falls back to get_media content directly.
         """
-        import re
-        from agent.db import crud
-        from agent.services.event_bus import event_bus
-
-        # Try TRPC getFlow
-        trpc_url = f"https://labs.google/fx/api/trpc/flow.getFlow?input=%7B%22json%22%3A%7B%22projectId%22%3A%22{project_id}%22%7D%7D"
-        result = await self._send("trpc_request", {
-            "url": trpc_url,
-            "method": "GET",
-        }, timeout=30)
-
-        if result.get("error"):
-            logger.warning("TRPC getFlow failed: %s", result.get("error"))
-            return {"error": result.get("error")}
-
-        # Extract body text
-        data = result.get("data", result)
-        body_text = json.dumps(data) if isinstance(data, (dict, list)) else str(data)
-
-        # Extract all GCS signed URLs
-        url_regex = r'https://storage\.googleapis\.com/ai-sandbox-videofx/(?:image|video)/[0-9a-f-]{36}\?[^"\'\\}\s]+'
-        raw_matches = re.findall(url_regex, body_text)
-
-        # Deduplicate by media_id
-        url_map = {}
-        for raw_url in raw_matches:
-            clean = raw_url.replace('\\u0026', '&').replace('\\/', '/').rstrip(',])}')
-            m = re.search(r'/(image|video)/([0-9a-f-]{36})\?', clean)
-            if m:
-                media_type, media_id = m.group(1), m.group(2)
-                url_map[media_id] = {"mediaId": media_id, "mediaType": media_type, "url": clean}
-
-        if not url_map:
-            logger.warning("No media URLs found in TRPC response")
-            return {"refreshed": 0, "found": 0}
-
-        # Update DB
-        await self._refresh_media_urls(list(url_map.values()))
-
-        logger.info("Bulk refresh: found %d unique media URLs for project %s", len(url_map), project_id[:12])
-        return {"refreshed": len(url_map), "found": len(raw_matches)}
+        logger.info("URL refresh requested for project %s — TRPC endpoint no longer available, "
+                     "use extension passive intercept (open project in Chrome)", project_id[:12])
+        return {"refreshed": 0, "found": 0, "note": "TRPC endpoint unavailable. "
+                "Video reviewer uses get_media fallback automatically. "
+                "For URL refresh, open the project in Google Flow in Chrome."}
 
     async def _send(self, method: str, params: dict, timeout: float = 300) -> dict:
         """Send request to extension and wait for response.

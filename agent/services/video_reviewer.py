@@ -124,39 +124,33 @@ async def _download_video(url: str, dest: Path) -> None:
                     f.write(chunk)
 
 
-async def _refresh_scene_video_url(scene_id: str, media_id: str, orient_prefix: str, project_id: str = None) -> str:
-    """Refresh expired URL via TRPC bulk refresh, then re-read scene from DB."""
+async def _download_via_get_media(media_id: str, dest: Path) -> None:
+    """Download video by fetching encoded content from get_media API."""
     from agent.services.flow_client import get_flow_client
-    from agent.db.crud import get_scene
 
     client = get_flow_client()
+    result = await client.get_media(media_id)
+    if result.get("error"):
+        raise ValueError(f"get_media failed for {media_id}: {result['error']}")
 
-    # Try TRPC bulk refresh (refreshes ALL media for the project at once)
-    if project_id and not getattr(_refresh_scene_video_url, "_bulk_done", False):
-        logger.info("Bulk-refreshing URLs for project %s via TRPC", project_id[:12])
-        result = await client.refresh_project_urls(project_id)
-        refreshed = result.get("refreshed", 0)
-        logger.info("Bulk refresh: updated %d URLs", refreshed)
-        _refresh_scene_video_url._bulk_done = True  # Only once per review run
+    data = result.get("data", result)
+    # Video content is in video.encodedVideo or image.encodedImage (base64)
+    encoded = None
+    if isinstance(data, dict):
+        if "video" in data and isinstance(data["video"], dict):
+            encoded = data["video"].get("encodedVideo")
+        elif "image" in data and isinstance(data["image"], dict):
+            encoded = data["image"].get("encodedImage")
+        elif "encodedVideo" in data:
+            encoded = data["encodedVideo"]
 
-    # Re-read scene from DB to get the updated URL
-    scene = await get_scene(scene_id)
-    fresh_url = scene.get(f"{orient_prefix}_video_url") if scene else None
+    if not encoded:
+        raise ValueError(f"No encoded content in get_media response for {media_id}")
 
-    if not fresh_url:
-        # Fallback: try per-media get_media
-        result = await client.get_media(media_id)
-        data = result.get("data", result)
-        fresh_url = data.get("fifeUrl") or data.get("servingUri")
-        if fresh_url:
-            from agent.db.crud import update_scene
-            await update_scene(scene_id, **{f"{orient_prefix}_video_url": fresh_url})
-            logger.info("Per-media refresh for scene %s", scene_id)
-
-    if not fresh_url:
-        raise ValueError(f"Could not refresh URL for scene {scene_id} media {media_id}")
-
-    return fresh_url
+    video_bytes = base64.standard_b64decode(encoded)
+    with open(dest, "wb") as f:
+        f.write(video_bytes)
+    logger.info("Downloaded %s via get_media (%d bytes)", media_id[:12], len(video_bytes))
 
 
 def _extract_frames(video_path: str, fps: float, out_dir: str) -> list:
@@ -388,14 +382,14 @@ async def review_scene_video(
         logger.info("Downloading video for scene %s from %s", scene["id"], video_url[:80])
         try:
             await _download_video(video_url, video_path)
-        except _URLExpiredError:
-            # Refresh URL via Google Flow API (bulk TRPC + per-media fallback)
+        except (_URLExpiredError, Exception) as e:
+            # URL expired or download failed — fall back to get_media API
             media_id = scene.get(f"{orient_prefix}_video_media_id")
             if not media_id:
                 raise ValueError(f"No media_id to refresh URL for scene {scene['id']}")
-            logger.info("URL expired for scene %s, refreshing media %s", scene["id"], media_id)
-            video_url = await _refresh_scene_video_url(scene["id"], media_id, orient_prefix, project_id)
-            await _download_video(video_url, video_path)
+            logger.info("URL download failed for scene %s (%s), fetching via get_media %s",
+                        scene["id"], type(e).__name__, media_id[:12])
+            await _download_via_get_media(media_id, video_path)
 
         if ANTHROPIC_API_KEY:
             # SDK path: individual frames
@@ -489,9 +483,6 @@ async def review_video(
     characters = await get_project_characters(project_id)
 
     orient_prefix = "vertical" if orientation.upper() == "VERTICAL" else "horizontal"
-
-    # Reset bulk refresh flag for this review run
-    _refresh_scene_video_url._bulk_done = False
 
     scene_reviews = []
     skipped = 0

@@ -129,8 +129,12 @@ processing=$(jq 'length' "$TMP/processing" 2>/dev/null || echo 0)
 
 short_name=$(echo "$proj_name" | cut -c1-15)
 
-# Project slug (pure bash — strip diacritics via iconv, lowercase, underscores)
-proj_slug=$(echo "$proj_name" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | tr -s '_' | sed 's/^_//;s/_$//')
+# Project slug — fetch from API (Python slugify is authoritative)
+proj_slug=$(curl -s --max-time 1 "$BASE/api/projects/$proj_id/output-dir" 2>/dev/null | jq -r '.slug // empty' 2>/dev/null)
+if [ -z "$proj_slug" ]; then
+  # Fallback: pure bash (lossy for non-ASCII)
+  proj_slug=$(echo "$proj_name" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | tr -s '_' | sed 's/^_//;s/_$//')
+fi
 
 # 4K downloaded count
 dl_count=0

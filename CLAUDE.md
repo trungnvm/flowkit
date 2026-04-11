@@ -29,6 +29,7 @@ curl -s http://127.0.0.1:8100/health
 | `/gla:concat` | Download + concat final video |
 | `/gla:concat-fit-narrator` | Concat trimmed to narrator duration |
 | `/gla:gen-narrator` | Generate narrator text + TTS |
+| `/gla:gen-text-overlays` | Generate text overlays from narrator text |
 | `/gla:gen-tts-template` | Create voice template for narration |
 | `/gla:gen-music` | Generate music via Suno |
 | `/gla:creative-mix` | Creative video mixing techniques |

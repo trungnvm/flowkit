@@ -102,7 +102,7 @@ ffmpeg -y -ss 1 -i "$VIDEO_FILE" -i "$TTS_WAV" \
   -c:v libx264 -preset fast -crf 18 \
   -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2" \
   -r 24 -pix_fmt yuv420p \
-  -c:a aac -b:a 192k \
+  -c:a aac -b:a 192k -ar 48000 -ac 2 \
   -movflags +faststart \
   "${OUTDIR}/trimmed/scene_${IDX3}_${SCENE_ID}.mp4"
 ```
@@ -123,12 +123,13 @@ ffmpeg -y -i "$VIDEO_FILE" \
   -c:v libx264 -preset fast -crf 18 \
   -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2" \
   -r 24 -pix_fmt yuv420p \
-  -c:a aac -b:a 192k \
+  -c:a aac -b:a 192k -ar 48000 -ac 2 \
   -movflags +faststart \
   "${OUTDIR}/trimmed/scene_${IDX3}_${SCENE_ID}.mp4"
 ```
 
 **CRITICAL: Do NOT use `-an`. Always preserve audio.**
+**CRITICAL: Always output `-ar 48000 -ac 2` (48kHz stereo) — TTS models often output 24kHz mono which causes audio dropout when concat with intro/outro.**
 
 ## Step 6b: Burn text overlays (per scene)
 

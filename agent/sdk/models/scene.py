@@ -42,6 +42,7 @@ class Scene(DomainModel):
     prompt: Optional[str] = None
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
+    transition_prompt: Optional[str] = None
     narrator_text: Optional[str] = None
     character_names: Optional[list[str]] = field(default=None)
     parent_scene_id: Optional[str] = None
@@ -81,6 +82,7 @@ class Scene(DomainModel):
             prompt=row.get("prompt"),
             image_prompt=row.get("image_prompt"),
             video_prompt=row.get("video_prompt"),
+            transition_prompt=row.get("transition_prompt"),
             narrator_text=row.get("narrator_text"),
             character_names=names_raw,
             parent_scene_id=row.get("parent_scene_id"),
@@ -106,6 +108,7 @@ class Scene(DomainModel):
             "prompt": self.prompt,
             "image_prompt": self.image_prompt,
             "video_prompt": self.video_prompt,
+            "transition_prompt": self.transition_prompt,
             "character_names": _json.dumps(self.character_names) if isinstance(self.character_names, list) else self.character_names,
             "parent_scene_id": self.parent_scene_id,
             "chain_type": self.chain_type,

@@ -16,6 +16,7 @@ def _scene_to_flat(sdk_scene) -> dict:
     flat["video_id"] = sdk_scene.video_id
     flat["display_order"] = sdk_scene.display_order
     flat["parent_scene_id"] = sdk_scene.parent_scene_id
+    flat["transition_prompt"] = sdk_scene.transition_prompt
     flat["chain_type"] = sdk_scene.chain_type
     flat["source"] = sdk_scene.source
     flat["character_names"] = sdk_scene.character_names

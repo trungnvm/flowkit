@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS scene (
     trim_end    REAL,
     duration    REAL,
 
+    -- Transition (chain scenes only: describes motion from this scene to next)
+    transition_prompt TEXT,
+
     -- Narration
     narrator_text TEXT,
 

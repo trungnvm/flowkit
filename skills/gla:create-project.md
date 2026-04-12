@@ -132,15 +132,70 @@ Save the returned `video_id`.
 
 For each scene, write a prompt that describes **action + environment + mood** only. Reference entities by name. Never describe character appearance. **All `prompt` and `video_prompt` must be in English** regardless of project language — the AI generator performs best with English prompts.
 
-- Scene 1: `chain_type: "ROOT"`
-- Scene 2+: `chain_type: "CONTINUATION"`, `parent_scene_id: "<previous_scene_id>"`
+### Chain Structure Rules
+
+`chain_type` controls how images are generated: CONTINUATION scenes use EDIT_IMAGE from parent (visual continuity), ROOT scenes generate fresh.
+
+**CONTINUATION** = visually continuous with parent scene. Use when:
+- Same primary character(s) continue acting
+- Same or adjacent location (camera moves within the space)
+- Direct temporal continuation ("then he runs to the door")
+
+**ROOT** = fresh generation, no visual dependency. Use when:
+- **Switching to different character/perspective** — e.g., cutting from Defector to Pursuer
+- **Jumping to different location** — e.g., from battlefield to interview studio
+- **Interview/talking-head scenes** — always ROOT (standalone, no chain)
+- **Time skip** — hours/days later
+
+**CRITICAL: Parallel timelines = separate chains.** If a sequence intercuts between 2 characters (e.g., Defector running + Pursuer chasing), create 2 separate CONTINUATION chains:
+```
+Chain A (Defector): scene_09 [ROOT] → scene_10 → scene_12 → scene_14
+Chain B (Pursuer): scene_11 [ROOT] → scene_13 → scene_15
+```
+Then interleave by `display_order` for playback: 9,10,11,12,13,14,15. Each chain maintains its own visual consistency via EDIT_IMAGE.
+
+**Never chain scenes with different primary characters.** EDIT_IMAGE morphs the parent image — chaining Pursuer→Defector will morph Pursuer's face into Defector's scene, causing character drift.
+
+### Transition Prompt (Chain Scenes Only)
+
+When a scene has `end_scene_media_id` (start+end frame video generation), the AI generates an 8s video transitioning from **this scene's image → next scene's image**. The regular `video_prompt` only describes this scene's action — it doesn't describe the motion toward the next frame.
+
+`transition_prompt` bridges the gap: it describes the **full trajectory from start frame to end frame**.
+
+**Rules:**
+- Only set `transition_prompt` on CONTINUATION chain scenes that have a child (i.e., another scene uses this scene as `parent_scene_id`)
+- ROOT scenes with no chain child: `transition_prompt` = empty (not needed, no end frame)
+- Last scene in a chain (no child): `transition_prompt` = empty (video uses `video_prompt` as normal)
+- When `transition_prompt` is set AND `end_scene_media_id` exists, the video generator uses `transition_prompt` instead of `video_prompt`
+
+**Format:** Same 0-8s sub-clip format as `video_prompt`, but describes motion from THIS scene's frame to the NEXT scene's frame.
+
+**Example:**
+```
+Scene 4 (soldiers drinking in barracks):
+  video_prompt: "0-3s: Medium wide shot, soldiers around table, drinking. 3-5s: Cut to The Defector laughing, raising tin cup. 5-8s: The Defector's smile fades, eyes darting to the door."
+  transition_prompt: "0-3s: Medium shot, soldiers laughing around table, The Defector raises cup. 3-5s: The Defector puts down cup, glances toward barracks door. 5-8s: He rises abruptly, pushes chair back, moves toward the door into the cold night."
+
+Scene 5 (Defector bursting through door — CHILD of scene 4):
+  start_image = scene 5's image (Defector at door)
+  video_prompt: "0-3s: The Defector bursts through barracks door, stumbling. 3-6s: He steadies against wall, breathing hard. 6-8s: Wide shot, Defector running into darkness."
+```
+
+Scene 4's video uses `transition_prompt` because it has `end_scene_media_id` (scene 5's image). The prompt describes the journey FROM drinking → TO bursting through door.
+
+### Scene Creation
+
+- `chain_type: "ROOT"` — standalone or first scene of a new chain
+- `chain_type: "CONTINUATION"` + `parent_scene_id: "<ID>"` — continues from parent (same character/perspective)
 - `character_names`: list ALL entities that should appear (characters + locations + assets)
 
 ```bash
 curl -X POST http://127.0.0.1:8100/api/scenes \
   -H "Content-Type: application/json" \
-  -d '{"video_id": "<VID>", "display_order": N, "prompt": "...", "character_names": [...], "chain_type": "ROOT|CONTINUATION", "parent_scene_id": "..."}'
+  -d '{"video_id": "<VID>", "display_order": N, "prompt": "...", "video_prompt": "...", "transition_prompt": "...", "character_names": [...], "chain_type": "ROOT|CONTINUATION", "parent_scene_id": "..."}'
 ```
+
+Note: `transition_prompt` only needed for chain scenes that have a child scene. Set to empty/null for ROOT scenes and last-in-chain scenes.
 
 ---
 
@@ -165,6 +220,19 @@ curl -X POST http://127.0.0.1:8100/api/scenes \
 - Never use single-word or atmosphere-only prompts: `"epic"`, `"dramatic"`, `"cinematic"`
 - Always include a camera/composition cue at the end
 - All `prompt`, `video_prompt`, and `image_prompt` MUST be in English regardless of project language
+
+**CRITICAL: Character face visibility rule.**
+When a character appears in the scene image, their face MUST be fully visible (front-facing, three-quarter, or side profile). The AI video model will fabricate/hallucinate any face area not shown in the start frame, causing character inconsistency.
+
+| Framing | OK? | Why |
+|---------|-----|-----|
+| Full face visible (front/side/profile) | YES | AI has reference for the entire face |
+| POV/first-person (only hands visible) | YES | No face to fabricate — intentionally faceless |
+| Face cropped at eyes/forehead (half face) | **NO** | AI will invent the missing top half → drift |
+| Character too far/small (face < 5% frame) | **NO** | AI will hallucinate facial details → inconsistent |
+| Character seen from behind (back of head) | OK | Only for famous-person bypass (see Real-People section) |
+
+**Rule:** If a character is in frame → show full face. If you don't want to show the face → use POV camera (hands/arms only) or wide environmental shot without the character. Never half-crop a face.
 
 **`voice_description`** on characters (max ~30 words) — auto-appended to video prompts by the worker. Dialogue tone must match voice profile. Example: `"Deep calm heroic voice, speaks slowly with confidence"`.
 
@@ -287,6 +355,6 @@ curl -X PATCH http://127.0.0.1:8100/api/scenes/<SID> \
   }'
 ```
 
-**Patchable fields:** `prompt`, `video_prompt`, `image_prompt`, `character_names`, `narrator_text`, `display_order`, `chain_type`.
+**Patchable fields:** `prompt`, `video_prompt`, `transition_prompt`, `image_prompt`, `character_names`, `narrator_text`, `display_order`, `chain_type`, `parent_scene_id`.
 
 **Workflow:** create scenes → review all prompts → PATCH to improve → then run /gla:gen-refs and /gla:gen-images. Scenes are mutable — update freely before generation starts.

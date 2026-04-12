@@ -277,7 +277,11 @@ class OperationService:
         pid = scene.get("_project_id", "0")
         end_id = scene.get(f"{prefix}_end_scene_media_id")
 
-        base_prompt = scene.get("video_prompt") or scene.get("prompt", "")
+        # Chain scenes with end_image: prefer transition_prompt (describes motion between frames)
+        if end_id and scene.get("transition_prompt"):
+            base_prompt = scene["transition_prompt"]
+        else:
+            base_prompt = scene.get("video_prompt") or scene.get("prompt", "")
         prompt = await _build_video_prompt(base_prompt, scene, pid)
 
         # Check if already submitted (op_name saved from previous attempt)
@@ -329,8 +333,14 @@ class OperationService:
         aspect = "VIDEO_ASPECT_RATIO_PORTRAIT" if orientation == "VERTICAL" else "VIDEO_ASPECT_RATIO_LANDSCAPE"
         tier = project.get("user_paygate_tier", "PAYGATE_TIER_TWO") if project else "PAYGATE_TIER_TWO"
         pid = scene.get("_project_id", "0")
+        prefix = "vertical" if orientation == "VERTICAL" else "horizontal"
+        end_id = scene.get(f"{prefix}_end_scene_media_id")
 
-        base_prompt = scene.get("video_prompt") or scene.get("prompt", "")
+        # Chain scenes with end_image: prefer transition_prompt
+        if end_id and scene.get("transition_prompt"):
+            base_prompt = scene["transition_prompt"]
+        else:
+            base_prompt = scene.get("video_prompt") or scene.get("prompt", "")
         prompt = await _build_video_prompt(base_prompt, scene, pid)
 
         char_names_raw = scene.get("character_names")

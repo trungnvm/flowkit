@@ -21,7 +21,7 @@ _COLUMNS = {
     "project": {"name", "description", "story", "thumbnail_url", "language", "status", "user_paygate_tier", "narrator_voice", "narrator_ref_audio", "material", "updated_at"},
     "video": {"title", "description", "display_order", "status", "orientation", "vertical_url", "horizontal_url",
               "thumbnail_url", "duration", "resolution", "youtube_id", "privacy", "tags", "updated_at"},
-    "scene": {"prompt", "image_prompt", "video_prompt", "character_names", "chain_type",
+    "scene": {"prompt", "image_prompt", "video_prompt", "character_names", "parent_scene_id", "chain_type",
               "vertical_image_url", "vertical_image_media_id", "vertical_image_status",
               "vertical_video_url", "vertical_video_media_id", "vertical_video_status",
               "vertical_upscale_url", "vertical_upscale_media_id", "vertical_upscale_status",
@@ -29,7 +29,7 @@ _COLUMNS = {
               "horizontal_video_url", "horizontal_video_media_id", "horizontal_video_status",
               "horizontal_upscale_url", "horizontal_upscale_media_id", "horizontal_upscale_status",
               "vertical_end_scene_media_id", "horizontal_end_scene_media_id",
-              "trim_start", "trim_end", "duration", "display_order", "source", "narrator_text", "updated_at"},
+              "trim_start", "trim_end", "duration", "display_order", "source", "transition_prompt", "narrator_text", "updated_at"},
     "request": {"status", "request_id", "media_id", "output_url", "error_message", "retry_count", "next_retry_at", "source_media_id", "updated_at"},
 }
 
@@ -185,6 +185,7 @@ async def list_videos(project_id: str) -> list[dict]:
 
 async def create_scene(video_id: str, display_order: int, prompt: str,
                        image_prompt: str = None, video_prompt: str = None,
+                       transition_prompt: str = None,
                        character_names: list[str] = None,
                        parent_scene_id: str = None, chain_type: str = "ROOT",
                        source: str = "root") -> dict:
@@ -193,9 +194,9 @@ async def create_scene(video_id: str, display_order: int, prompt: str,
     chars_json = json.dumps(character_names) if character_names else None
     async with _db_lock:
         await db.execute(
-            """INSERT INTO scene (id,video_id,display_order,prompt,image_prompt,video_prompt,character_names,
-               parent_scene_id,chain_type,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (sid, video_id, display_order, prompt, image_prompt, video_prompt, chars_json,
+            """INSERT INTO scene (id,video_id,display_order,prompt,image_prompt,video_prompt,transition_prompt,character_names,
+               parent_scene_id,chain_type,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (sid, video_id, display_order, prompt, image_prompt, video_prompt, transition_prompt, chars_json,
              parent_scene_id, chain_type, source, now, now))
         await db.commit()
     return await _get_with_db(db, "scene", "id", sid)

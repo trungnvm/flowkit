@@ -9,6 +9,7 @@ class SceneCreate(BaseModel):
     prompt: str
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
+    transition_prompt: Optional[str] = None
     character_names: Optional[list[str]] = None
     parent_scene_id: Optional[str] = None
     chain_type: ChainType = "ROOT"
@@ -20,6 +21,7 @@ class SceneUpdate(BaseModel):
     image_prompt: Optional[str] = None
     video_prompt: Optional[str] = None
     character_names: Optional[list[str]] = None
+    parent_scene_id: Optional[str] = None
     chain_type: Optional[ChainType] = None
     source: Optional[SceneSource] = None
     display_order: Optional[int] = None
@@ -46,6 +48,8 @@ class SceneUpdate(BaseModel):
 
     vertical_end_scene_media_id: Optional[str] = None
     horizontal_end_scene_media_id: Optional[str] = None
+
+    transition_prompt: Optional[str] = None
 
     trim_start: Optional[float] = None
     trim_end: Optional[float] = None
@@ -87,6 +91,8 @@ class Scene(BaseModel):
 
     vertical_end_scene_media_id: Optional[str] = None
     horizontal_end_scene_media_id: Optional[str] = None
+
+    transition_prompt: Optional[str] = None
 
     trim_start: Optional[float] = None
     trim_end: Optional[float] = None

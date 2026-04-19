@@ -4,7 +4,7 @@
  * diện mạo xuyên suốt toàn bộ các cảnh trong video.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Loader, X, RefreshCw, ZoomIn, Wand2, RotateCcw, Upload, Plus } from 'lucide-react'
+import { Users, Loader, X, RefreshCw, ZoomIn, Wand2, RotateCcw, Upload, Plus, Trash2 } from 'lucide-react'
 import { fetchAPI, patchAPI, postAPI, postFormAPI } from '../../api/client'
 import type { Character, WSEvent } from '../../types'
 import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
@@ -49,6 +49,7 @@ export default function CharactersWorkspaceTab({
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [genChar, setGenChar] = useState<string | null>(null)   // character id đang gen
   const [uploadingChar, setUploadingChar] = useState<string | null>(null)
+  const [deletingChar, setDeletingChar] = useState<string | null>(null)
   const [uploadErr, setUploadErr] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -134,6 +135,19 @@ export default function CharactersWorkspaceTab({
       setUploadErr(e instanceof Error ? e.message : 'Create character failed')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function deleteRefImage(char: Character) {
+    setDeletingChar(char.id)
+    setUploadErr('')
+    try {
+      await patchAPI(`/api/characters/${char.id}`, { reference_image_url: null, media_id: null })
+      await loadCharacters()
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : t('Xoá ảnh ref thất bại', 'Failed to delete ref image'))
+    } finally {
+      setDeletingChar(null)
     }
   }
 
@@ -224,9 +238,25 @@ export default function CharactersWorkspaceTab({
                       style={{ background: 'rgba(0,0,0,0.6)', color: 'rgba(255,255,255,0.8)' }}>
                       {ENTITY_LABEL[char.entity_type] ?? char.entity_type}
                     </span>
-                    <span className="w-2 h-2 rounded-full"
-                      style={{ background: hasMediaId ? STATUS_COLOR.done : STATUS_COLOR.pending }}
-                      title={hasMediaId ? t('Media ID sẵn sàng', 'Media ID ready') : t('Chưa có media ID', 'No media ID')} />
+                    <div className="flex items-center gap-1">
+                      {hasImage && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void deleteRefImage(char)
+                          }}
+                          disabled={deletingChar === char.id}
+                          className="w-5 h-5 rounded flex items-center justify-center"
+                          style={{ background: 'rgba(239,68,68,0.85)', color: '#fff', opacity: deletingChar === char.id ? 0.6 : 1 }}
+                          title={t('Xoá ảnh ref', 'Delete ref image')}
+                        >
+                          {deletingChar === char.id ? <Loader size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                        </button>
+                      )}
+                      <span className="w-2 h-2 rounded-full"
+                        style={{ background: hasMediaId ? STATUS_COLOR.done : STATUS_COLOR.pending }}
+                        title={hasMediaId ? t('Media ID sẵn sàng', 'Media ID ready') : t('Chưa có media ID', 'No media ID')} />
+                    </div>
                   </div>
                 </div>
 

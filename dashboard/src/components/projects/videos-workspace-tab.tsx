@@ -3,6 +3,7 @@ import { Film, Loader, Mic, Play, X, Plus, RefreshCw } from 'lucide-react'
 import { fetchAPI, postAPI, patchAPI } from '../../api/client'
 import type { Scene, Video, RequestType, WSEvent } from '../../types'
 import EditableText from './EditableText'
+import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
 
 const STATUS_COLOR: Record<string, string> = {
   COMPLETED: 'var(--green)', PROCESSING: 'var(--yellow)',
@@ -34,6 +35,7 @@ type GenType = 'GENERATE_VIDEO' | 'GENERATE_VIDEO_REFS'
 type Orientation = 'VERTICAL' | 'HORIZONTAL'
 
 export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId: string; lastEvent?: WSEvent | null }) {
+  const { t } = useI18n()
   const [videos, setVideos] = useState<Video[]>([])
   const [selectedVideoId, setSelectedVideoId] = useState('')
   const [scenes, setScenes] = useState<Scene[]>([])
@@ -124,13 +126,13 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
         project_id: projectId,
         orientation,
       })
-      setNarrateMsg('Tạo narrate thành công / Success')
+      setNarrateMsg(t('Tạo narrate thành công', 'Narration generated successfully'))
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Lỗi / Failed'
+      const msg = e instanceof Error ? e.message : t('Lỗi', 'Failed')
       if (msg.includes('No scenes found for video')) {
-        setNarrateMsg('Video chưa có scene / No scenes in this video')
+        setNarrateMsg(t('Video chưa có scene', 'No scenes in this video'))
       } else if (msg.includes('No scenes in range')) {
-        setNarrateMsg('Khoảng scene không hợp lệ / Invalid scene range')
+        setNarrateMsg(t('Khoảng scene không hợp lệ', 'Invalid scene range'))
       } else {
         setNarrateMsg(msg)
       }
@@ -141,7 +143,7 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
   const videoUrl = (s: Scene) => orientation === 'VERTICAL' ? s.vertical_video_url : s.horizontal_video_url
   const videoStatus = (s: Scene) => orientation === 'VERTICAL' ? s.vertical_video_status : s.horizontal_video_status
 
-  if (loading) return <div className="text-xs" style={{ color: 'var(--muted)' }}>Đang tải... / Loading...</div>
+  if (loading) return <div className="text-xs" style={{ color: 'var(--muted)' }}>{t('Đang tải...', 'Loading...')}</div>
 
   return (
     <div className="flex flex-col gap-3">
@@ -159,7 +161,7 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
         <button onClick={() => setShowAddVideo(v => !v)}
           className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold"
           style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-          <Plus size={11} /> Video
+          <Plus size={11} /> {t('Video', 'Video')}
         </button>
 
         {/* Orientation toggle */}
@@ -185,17 +187,17 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
             <button onClick={() => { setRefreshing(true); loadScenes(selectedVideoId); setTimeout(() => setRefreshing(false), 500) }}
               className="flex items-center gap-1 px-2 py-1.5 rounded text-xs"
               style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}
-              title="Làm mới / Refresh">
+              title={t('Làm mới', 'Refresh')}>
               <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
             </button>
             <button onClick={narrate} disabled={narrating}
               className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs font-semibold"
               style={{ background: 'rgba(168,85,247,0.15)', color: '#a78bfa', border: '1px solid rgba(168,85,247,0.3)' }}>
               {narrating ? <Loader size={12} className="animate-spin" /> : <Mic size={12} />}
-              Kể chuyện / Narrate
+              {t('Kể chuyện', 'Narrate')}
             </button>
             {narrateMsg && (
-              <span className="text-xs" style={{ color: narrateMsg.includes('thành công') || narrateMsg.includes('Success') ? 'var(--green)' : 'var(--red)' }}>
+              <span className="text-xs" style={{ color: narrateMsg.includes(t('thành công', 'success')) || narrateMsg.includes(t('Success', 'Success')) ? 'var(--green)' : 'var(--red)' }}>
                 {narrateMsg}
               </span>
             )}
@@ -203,7 +205,7 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
               className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold ml-auto"
               style={{ background: 'rgba(139,92,246,0.85)', color: '#fff', opacity: genAll || scenes.length === 0 ? 0.5 : 1 }}>
               {genAll ? <Loader size={12} className="animate-spin" /> : <Film size={12} />}
-              Tạo tất cả / Gen All ({scenes.length})
+              {t('Tạo tất cả', 'Gen all')} ({scenes.length})
             </button>
           </>
         )}
@@ -214,13 +216,13 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
         <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <input value={videoTitle} onChange={e => setVideoTitle(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && createVideo()}
-            placeholder="Tên video / Video title..." autoFocus
+            placeholder={t('Tên video...', 'Video title...')} autoFocus
             className="flex-1 text-xs px-2 py-1 rounded outline-none"
             style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }} />
           <button onClick={createVideo} disabled={savingVideo || !videoTitle.trim()}
             className="px-3 py-1 rounded text-xs font-semibold"
             style={{ background: 'var(--accent)', color: '#fff', opacity: savingVideo || !videoTitle.trim() ? 0.5 : 1 }}>
-            {savingVideo ? '...' : 'Tạo / Create'}
+            {savingVideo ? '...' : t('Tạo', 'Create')}
           </button>
           <button onClick={() => setShowAddVideo(false)} className="text-xs" style={{ color: 'var(--muted)' }}>✕</button>
         </div>
@@ -228,7 +230,7 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
 
       {videos.length === 0 && !showAddVideo && (
         <div className="text-xs text-center py-8" style={{ color: 'var(--muted)' }}>
-          Chưa có video. Click <strong>+ Video</strong> để tạo.
+          {t('Chưa có video. Bấm + Video để tạo.', 'No videos yet. Click + Video to create.')}
         </div>
       )}
 
@@ -301,8 +303,8 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
                         className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold"
                         style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.25)' }}>
                         {genScene === s.id
-                          ? <><Loader size={10} className="animate-spin" /> Đang tạo...</>
-                          : <><Film size={10} /> Tạo video / Gen</>}
+                          ? <><Loader size={10} className="animate-spin" /> {t('Đang tạo...', 'Generating...')}</>
+                          : <><Film size={10} /> {t('Tạo video', 'Generate video')}</>}
                       </button>
                     </div>
                   </div>
@@ -315,17 +317,17 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
           {showAddScene ? (
             <div className="flex flex-col gap-2 rounded-lg p-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
               <textarea value={sceneVideoPrompt} onChange={e => setSceneVideoPrompt(e.target.value)} rows={2} autoFocus
-                placeholder="Mô tả cảnh video / Video scene prompt..."
+                placeholder={t('Mô tả cảnh video...', 'Video scene prompt...')}
                 className="w-full text-xs px-2 py-1.5 rounded outline-none resize-none"
                 style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }} />
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setShowAddScene(false)} className="px-3 py-1 rounded text-xs" style={{ color: 'var(--muted)' }}>
-                  Hủy / Cancel
+                  {t('Hủy', 'Cancel')}
                 </button>
                 <button onClick={addScene} disabled={savingScene}
                   className="px-3 py-1 rounded text-xs font-semibold"
                   style={{ background: 'var(--accent)', color: '#fff', opacity: savingScene ? 0.5 : 1 }}>
-                  {savingScene ? '...' : 'Thêm / Add'}
+                  {savingScene ? '...' : t('Thêm', 'Add')}
                 </button>
               </div>
             </div>
@@ -333,7 +335,7 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
             <button onClick={() => setShowAddScene(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-semibold"
               style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px dashed var(--border)' }}>
-              <Plus size={12} /> Thêm cảnh / Add Scene
+              <Plus size={12} /> {t('Thêm cảnh', 'Add scene')}
             </button>
           )}
         </>

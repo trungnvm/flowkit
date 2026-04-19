@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -353,6 +355,41 @@ async def save_project_script(pid: str, body: ProjectScriptSaveRequest):
     )
 
 
+@router.post("/{pid}/script/test-provider")
+async def test_project_script_provider(pid: str, body: ProjectScriptProviderTestRequest):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    provider = body.provider.strip().lower()
+    if provider not in _SCRIPT_PROVIDERS:
+        raise HTTPException(400, f"Unsupported provider: {body.provider}")
+
+    key = (body.api_key or "").strip() or os.environ.get(
+        {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "dashscope": "DASHSCOPE_API_KEY",
+        }[provider],
+        "",
+    )
+    if not key:
+        raise HTTPException(400, f"{provider.upper()} API key is missing")
+
+    _, model = await _generate_script(
+        provider=provider,
+        topic="health check",
+        language="en",
+        max_words=60,
+        prompt="Return exactly: OK",
+        api_key=key,
+        model_override=body.model,
+    )
+    return {"ok": True, "provider": provider, "model": model}
+
+
 @router.post("/{pid}/script/generate")
 async def generate_project_script(pid: str, body: ProjectScriptGenerateRequest):
     repo = _get_repo()
@@ -360,7 +397,18 @@ async def generate_project_script(pid: str, body: ProjectScriptGenerateRequest):
     if not project:
         raise HTTPException(404, "Project not found")
 
-    script, model = await _generate_script(body.provider, body.topic, body.language, body.max_words)
+    if not (body.prompt and body.prompt.strip()) and not body.topic.strip():
+        raise HTTPException(400, "Either prompt or topic is required")
+
+    script, model = await _generate_script(
+        provider=body.provider,
+        topic=body.topic,
+        language=body.language,
+        max_words=body.max_words,
+        prompt=body.prompt,
+        api_key=body.api_key,
+        model_override=body.model,
+    )
     meta = _load_project_meta(pid)
     meta["script"] = script
     meta["script_provider"] = body.provider.lower().strip()
@@ -475,13 +523,22 @@ class ProjectPromptResponse(BaseModel):
 
 class ProjectScriptGenerateRequest(BaseModel):
     provider: str
-    topic: str
+    topic: str = ""
+    prompt: str | None = None
+    api_key: str | None = None
+    model: str | None = None
     language: str = "vi"
     max_words: int = 450
 
 
 class ProjectScriptSaveRequest(BaseModel):
     script: str
+
+
+class ProjectScriptProviderTestRequest(BaseModel):
+    provider: str
+    api_key: str | None = None
+    model: str | None = None
 
 
 class ProjectScriptResponse(BaseModel):
@@ -491,13 +548,22 @@ class ProjectScriptResponse(BaseModel):
     script: str
 
 
-async def _generate_script(provider: str, topic: str, language: str, max_words: int) -> tuple[str, str]:
+async def _generate_script(
+    provider: str,
+    topic: str,
+    language: str,
+    max_words: int,
+    prompt: str | None = None,
+    api_key: str | None = None,
+    model_override: str | None = None,
+) -> tuple[str, str]:
     p = provider.strip().lower()
     if p not in _SCRIPT_PROVIDERS:
         raise HTTPException(400, f"Unsupported provider: {provider}")
 
-    model = os.environ.get(_SCRIPT_MODEL_ENV[p], _SCRIPT_MODEL_DEFAULT[p])
-    prompt = (
+    model = (model_override or "").strip() or os.environ.get(_SCRIPT_MODEL_ENV[p], _SCRIPT_MODEL_DEFAULT[p])
+    user_prompt = (prompt or "").strip()
+    final_prompt = user_prompt or (
         f"Write a concise video script in language '{language}'. "
         f"Topic: {topic}. Max words: {max_words}. "
         "Return plain text only, no markdown headings."
@@ -505,7 +571,7 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
 
     try:
         if p == "anthropic":
-            key = os.environ.get("ANTHROPIC_API_KEY", "")
+            key = (api_key or "").strip() or os.environ.get("ANTHROPIC_API_KEY", "")
             if not key:
                 raise HTTPException(400, "ANTHROPIC_API_KEY is missing")
             import anthropic
@@ -513,7 +579,7 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
             resp = await client.messages.create(
                 model=model,
                 max_tokens=1200,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": final_prompt}],
             )
             text = "".join([b.text for b in resp.content if getattr(b, "type", "") == "text"]).strip()
             if not text:
@@ -521,7 +587,7 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
             return text, model
 
         if p == "openai":
-            key = os.environ.get("OPENAI_API_KEY", "")
+            key = (api_key or "").strip() or os.environ.get("OPENAI_API_KEY", "")
             if not key:
                 raise HTTPException(400, "OPENAI_API_KEY is missing")
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -530,7 +596,7 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
                     headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                     json={
                         "model": model,
-                        "messages": [{"role": "user", "content": prompt}],
+                        "messages": [{"role": "user", "content": final_prompt}],
                         "temperature": 0.7,
                     },
                 )
@@ -543,12 +609,12 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
                 return text, model
 
         if p == "gemini":
-            key = os.environ.get("GEMINI_API_KEY", "")
+            key = (api_key or "").strip() or os.environ.get("GEMINI_API_KEY", "")
             if not key:
                 raise HTTPException(400, "GEMINI_API_KEY is missing")
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
             async with httpx.AsyncClient(timeout=60.0) as client:
-                r = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+                r = await client.post(url, json={"contents": [{"parts": [{"text": final_prompt}]}]})
                 if r.status_code >= 400:
                     raise HTTPException(r.status_code, f"Gemini error: {r.text}")
                 data = r.json()
@@ -561,7 +627,7 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
                     raise HTTPException(502, "Gemini returned empty script")
                 return text, model
 
-        key = os.environ.get("DASHSCOPE_API_KEY", "")
+        key = (api_key or "").strip() or os.environ.get("DASHSCOPE_API_KEY", "")
         if not key:
             raise HTTPException(400, "DASHSCOPE_API_KEY is missing")
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -570,7 +636,7 @@ async def _generate_script(provider: str, topic: str, language: str, max_words: 
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={
                     "model": model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": final_prompt}],
                     "temperature": 0.7,
                 },
             )

@@ -1,5 +1,7 @@
 const BASE = ''  // same origin, proxied by Vite in dev
 
+export const WS_BASE = (import.meta.env.VITE_WS_BASE as string | undefined)?.trim() || ''
+
 export async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
   const isFormData = options?.body instanceof FormData
   const headers = new Headers(options?.headers)

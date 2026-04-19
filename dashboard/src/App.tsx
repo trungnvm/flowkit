@@ -1,36 +1,35 @@
 import { BrowserRouter, NavLink, Routes, Route, useLocation } from 'react-router-dom'
-import { LayoutDashboard, FolderOpen, ScrollText, Film } from 'lucide-react'
+import { LayoutDashboard, FolderOpen, ScrollText, Film, Languages } from 'lucide-react'
 import { useWebSocket } from './api/useWebSocket'
 import DashboardPage from './pages/DashboardPage'
 import ProjectsPage from './pages/ProjectsPage'
 import LogsPage from './pages/LogsPage'
 import GalleryPage from './pages/GalleryPage'
-
-const NAV = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
-  { to: '/projects', icon: FolderOpen, label: 'Projects', exact: false },
-  { to: '/logs', icon: ScrollText, label: 'Logs', exact: false },
-  { to: '/gallery', icon: Film, label: 'Gallery', exact: false },
-]
-
-function PageTitle() {
-  const loc = useLocation()
-  const match = NAV.find(n => n.exact ? loc.pathname === n.to : loc.pathname.startsWith(n.to))
-  return <span>{match?.label ?? 'Dashboard'}</span>
-}
+import { useI18n } from './language-toggle-and-bilingual-ui-context'
 
 function Layout() {
   const { isConnected } = useWebSocket()
+  const { language, toggleLanguage, t } = useI18n()
+
+  const nav = [
+    { to: '/', icon: LayoutDashboard, label: t('Bảng điều khiển', 'Dashboard'), exact: true },
+    { to: '/projects', icon: FolderOpen, label: t('Dự án', 'Projects'), exact: false },
+    { to: '/logs', icon: ScrollText, label: t('Nhật ký', 'Logs'), exact: false },
+    { to: '/gallery', icon: Film, label: t('Thư viện', 'Gallery'), exact: false },
+  ]
+
+  const loc = useLocation()
+  const match = nav.find(n => n.exact ? loc.pathname === n.to : loc.pathname.startsWith(n.to))
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
       {/* Left sidebar */}
       <aside className="w-48 flex-shrink-0 flex flex-col border-r" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
         <div className="px-4 py-4 text-xs font-bold tracking-widest uppercase" style={{ color: 'var(--muted)' }}>
-          Flow Agent
+          Flow Kit
         </div>
         <nav className="flex flex-col gap-1 px-2">
-          {NAV.map(({ to, icon: Icon, label, exact }) => (
+          {nav.map(({ to, icon: Icon, label, exact }) => (
             <NavLink
               key={to}
               to={to}
@@ -59,15 +58,23 @@ function Layout() {
         {/* Top header */}
         <header className="flex items-center justify-between px-5 py-3 border-b flex-shrink-0" style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}>
           <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-            <PageTitle />
+            {match?.label ?? t('Bảng điều khiển', 'Dashboard')}
           </span>
           <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
+            <button
+              onClick={toggleLanguage}
+              className="flex items-center gap-1.5 px-2 py-1 rounded"
+              style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--muted)' }}
+              title={t('Đổi ngôn ngữ', 'Switch language')}
+            >
+              <Languages size={12} /> {language.toUpperCase()}
+            </button>
             <span className="flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full"
                 style={{ background: isConnected ? 'var(--green)' : 'var(--red)' }}
               />
-              {isConnected ? 'WS connected' : 'WS disconnected'}
+              {isConnected ? t('WS đã kết nối', 'WS connected') : t('WS ngắt kết nối', 'WS disconnected')}
             </span>
           </div>
         </header>

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import type { Scene } from '../../types'
 import VideoPlayer from './VideoPlayer'
+import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
 
 interface VideoGalleryProps {
   scenes: Scene[]
 }
 
 export default function VideoGallery({ scenes }: VideoGalleryProps) {
+  const { t } = useI18n()
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   const videoscenes = scenes.filter(s => s.vertical_video_url)
@@ -14,7 +16,7 @@ export default function VideoGallery({ scenes }: VideoGalleryProps) {
   if (videoscenes.length === 0) {
     return (
       <div className="flex items-center justify-center py-16" style={{ color: 'var(--muted)' }}>
-        No completed videos yet.
+        {t('Chưa có video hoàn tất.', 'No completed videos yet.')}
       </div>
     )
   }
@@ -39,7 +41,7 @@ export default function VideoGallery({ scenes }: VideoGalleryProps) {
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-                  No image
+                  {t('Chưa có ảnh', 'No image')}
                 </div>
               )}
 
@@ -51,7 +53,7 @@ export default function VideoGallery({ scenes }: VideoGalleryProps) {
                   </span>
                   <div className="flex gap-1">
                     {scene.vertical_video_url && (
-                      <span title="Video ready" className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.8)', color: '#fff' }}>
+                      <span title={t('Video sẵn sàng', 'Video ready')} className="text-xs px-1 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.8)', color: '#fff' }}>
                         ✓
                       </span>
                     )}

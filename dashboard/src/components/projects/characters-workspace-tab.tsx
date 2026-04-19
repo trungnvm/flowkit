@@ -4,9 +4,10 @@
  * diện mạo xuyên suốt toàn bộ các cảnh trong video.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Loader, X, RefreshCw, ZoomIn, Wand2, RotateCcw, Upload } from 'lucide-react'
-import { fetchAPI, postAPI, postFormAPI } from '../../api/client'
+import { Users, Loader, X, RefreshCw, ZoomIn, Wand2, RotateCcw, Upload, Plus } from 'lucide-react'
+import { fetchAPI, patchAPI, postAPI, postFormAPI } from '../../api/client'
 import type { Character, WSEvent } from '../../types'
+import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
 
 const ENTITY_LABEL: Record<string, string> = {
   character: 'Nhân vật',
@@ -42,6 +43,7 @@ export default function CharactersWorkspaceTab({
   projectId: string
   lastEvent?: WSEvent | null
 }) {
+  const { t } = useI18n()
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -49,11 +51,15 @@ export default function CharactersWorkspaceTab({
   const [uploadingChar, setUploadingChar] = useState<string | null>(null)
   const [uploadErr, setUploadErr] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [imagePrompts, setImagePrompts] = useState<Record<string, string>>({})
 
   const loadCharacters = useCallback(async () => {
     try {
       const chars = await fetchAPI<Character[]>(`/api/projects/${projectId}/characters`)
       setCharacters(chars)
+      setImagePrompts(Object.fromEntries(chars.map(c => [c.id, c.image_prompt ?? ''])))
     } finally {
       setLoading(false)
     }
@@ -73,11 +79,16 @@ export default function CharactersWorkspaceTab({
   async function genRef(char: Character, regen = false) {
     setGenChar(char.id)
     try {
+      const prompt = imagePrompts[char.id]?.trim() ?? ''
+      if (prompt) {
+        await patchAPI(`/api/characters/${char.id}`, { image_prompt: prompt })
+      }
       await postAPI('/api/requests', {
         type: regen ? 'REGENERATE_CHARACTER_IMAGE' : 'GENERATE_CHARACTER_IMAGE',
         character_id: char.id,
         project_id: projectId,
       })
+      await loadCharacters()
     } finally {
       setGenChar(null)
     }
@@ -94,9 +105,35 @@ export default function CharactersWorkspaceTab({
       await postFormAPI(`/api/characters/${char.id}/upload-reference-image`, form)
       await loadCharacters()
     } catch (e) {
-      setUploadErr(e instanceof Error ? e.message : 'Upload thất bại / Upload failed')
+      const raw = e instanceof Error ? e.message : 'Upload failed'
+      if (raw.includes('Character is not linked to this project')) {
+        await postAPI(`/api/projects/${projectId}/characters/${char.id}`)
+        const retry = new FormData()
+        retry.append('project_id', projectId)
+        retry.append('file', file)
+        await postFormAPI(`/api/characters/${char.id}/upload-reference-image`, retry)
+        await loadCharacters()
+        return
+      }
+      setUploadErr(raw)
     } finally {
       setUploadingChar(null)
+    }
+  }
+
+  async function createAndLinkCharacter() {
+    if (!newName.trim()) return
+    setCreating(true)
+    setUploadErr('')
+    try {
+      const created = await postAPI<Character>('/api/characters', { name: newName.trim(), entity_type: 'character' })
+      await postAPI(`/api/projects/${projectId}/characters/${created.id}`)
+      setNewName('')
+      await loadCharacters()
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : 'Create character failed')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -107,7 +144,7 @@ export default function CharactersWorkspaceTab({
   }
 
   if (loading) {
-    return <div className="text-xs" style={{ color: 'var(--muted)' }}>Đang tải... / Loading...</div>
+    return <div className="text-xs" style={{ color: 'var(--muted)' }}>{t('Đang tải...', 'Loading...')}</div>
   }
 
   return (
@@ -118,21 +155,40 @@ export default function CharactersWorkspaceTab({
       <div className="flex items-center gap-2">
         <Users size={14} style={{ color: 'var(--muted)' }} />
         <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>
-          Nhân vật / Characters ({characters.length})
+          {t('Nhân vật', 'Characters')} ({characters.length})
         </span>
         <button onClick={refresh}
           className="flex items-center gap-1 px-2 py-1 rounded text-xs ml-auto"
           style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}
-          title="Làm mới / Refresh">
+          title={t('Làm mới', 'Refresh')}>
           <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 rounded-lg p-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+        <input
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && void createAndLinkCharacter()}
+          placeholder={t('Tên character mới...', 'New character name...')}
+          className="flex-1 text-xs px-2 py-1.5 rounded outline-none"
+          style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }}
+        />
+        <button
+          onClick={() => void createAndLinkCharacter()}
+          disabled={creating || !newName.trim()}
+          className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold"
+          style={{ background: 'var(--accent)', color: '#fff', opacity: creating || !newName.trim() ? 0.5 : 1 }}
+        >
+          {creating ? <Loader size={10} className="animate-spin" /> : <Plus size={10} />} {t('Thêm', 'Add')}
         </button>
       </div>
 
       {characters.length === 0 && (
         <div className="text-xs text-center py-10" style={{ color: 'var(--muted)' }}>
           <Users size={32} className="mx-auto mb-2 opacity-20" />
-          <p>Chưa có nhân vật nào.</p>
-          <p className="mt-1 opacity-60">Dùng <code>/fk-create-project</code> để tạo project với characters.</p>
+          <p>{t('Chưa có nhân vật nào.', 'No characters yet.')}</p>
+          <p className="mt-1 opacity-60">{t('Dùng /fk-create-project để tạo project với characters.', 'Use /fk-create-project to create a project with characters.')}</p>
         </div>
       )}
 
@@ -158,7 +214,7 @@ export default function CharactersWorkspaceTab({
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-1">
                       <ZoomIn size={20} style={{ color: 'var(--muted)', opacity: 0.2 }} />
-                      <span className="text-xs" style={{ color: 'var(--muted)', opacity: 0.4 }}>Chưa có ảnh</span>
+                      <span className="text-xs" style={{ color: 'var(--muted)', opacity: 0.4 }}>{t('Chưa có ảnh', 'No image')}</span>
                     </div>
                   )}
 
@@ -170,7 +226,7 @@ export default function CharactersWorkspaceTab({
                     </span>
                     <span className="w-2 h-2 rounded-full"
                       style={{ background: hasMediaId ? STATUS_COLOR.done : STATUS_COLOR.pending }}
-                      title={hasMediaId ? 'Media ID sẵn sàng / Ready' : 'Chưa có media ID / No media ID'} />
+                      title={hasMediaId ? t('Media ID sẵn sàng', 'Media ID ready') : t('Chưa có media ID', 'No media ID')} />
                   </div>
                 </div>
 
@@ -186,12 +242,20 @@ export default function CharactersWorkspaceTab({
                   )}
 
                   {/* Upload + Gen / Regen buttons */}
+                  <textarea
+                    value={imagePrompts[char.id] ?? ''}
+                    onChange={e => setImagePrompts(prev => ({ ...prev, [char.id]: e.target.value }))}
+                    rows={2}
+                    placeholder={t('Prompt ảnh character...', 'Character image prompt...')}
+                    className="w-full text-xs px-2 py-1 rounded outline-none resize-none"
+                    style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                  />
                   <label
                     className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold cursor-pointer"
                     style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.25)' }}>
                     {uploadingChar === char.id
-                      ? <><Loader size={10} className="animate-spin" /> Đang tải...</>
-                      : <><Upload size={10} /> Upload ảnh / Upload</>}
+                      ? <><Loader size={10} className="animate-spin" /> {t('Đang tải...', 'Uploading...')}</>
+                      : <><Upload size={10} /> {t('Upload ảnh', 'Upload image')}</>}
                     <input
                       type="file"
                       accept="image/*"
@@ -210,16 +274,16 @@ export default function CharactersWorkspaceTab({
                       className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold"
                       style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--accent)', border: '1px solid rgba(59,130,246,0.25)' }}>
                       {isGenerating
-                        ? <><Loader size={10} className="animate-spin" /> Đang tạo...</>
-                        : <><Wand2 size={10} /> Tạo ảnh / Gen Ref</>}
+                        ? <><Loader size={10} className="animate-spin" /> {t('Đang tạo...', 'Generating...')}</>
+                        : <><Wand2 size={10} /> {t('Tạo ảnh ref', 'Gen ref image')}</>}
                     </button>
                   ) : (
                     <button onClick={() => genRef(char, true)} disabled={isGenerating || uploadingChar === char.id}
                       className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold"
                       style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
                       {isGenerating
-                        ? <><Loader size={10} className="animate-spin" /> Đang tạo...</>
-                        : <><RotateCcw size={10} /> Tạo lại / Regen</>}
+                        ? <><Loader size={10} className="animate-spin" /> {t('Đang tạo...', 'Generating...')}</>
+                        : <><RotateCcw size={10} /> {t('Tạo lại', 'Regenerate')}</>}
                     </button>
                   )}
                 </div>
@@ -235,8 +299,10 @@ export default function CharactersWorkspaceTab({
 
       {/* Hint */}
       <p className="text-xs" style={{ color: 'var(--muted)', opacity: 0.5 }}>
-        Ảnh ref được dùng để giữ nhất quán diện mạo nhân vật trong tất cả các cảnh.
-        / Reference images ensure visual consistency across all scenes.
+        {t(
+          'Ảnh ref được dùng để giữ nhất quán diện mạo nhân vật trong tất cả các cảnh.',
+          'Reference images are used to keep character appearance consistent across all scenes.'
+        )}
       </p>
     </div>
   )

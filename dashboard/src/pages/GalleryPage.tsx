@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { fetchAPI } from '../api/client'
 import type { Project, Video, Scene } from '../types'
 import VideoGallery from '../components/gallery/VideoGallery'
+import { useI18n } from '../language-toggle-and-bilingual-ui-context'
 
 export default function GalleryPage() {
+  const { t } = useI18n()
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<string>('')
   const [videos, setVideos] = useState<Video[]>([])
@@ -48,7 +50,7 @@ export default function GalleryPage() {
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
         <div className="flex flex-col gap-1">
-          <label className="text-xs" style={{ color: 'var(--muted)' }}>Project</label>
+          <label className="text-xs" style={{ color: 'var(--muted)' }}>{t('Dự án', 'Project')}</label>
           <select
             value={selectedProject}
             onChange={e => setSelectedProject(e.target.value)}
@@ -63,7 +65,7 @@ export default function GalleryPage() {
 
         {videos.length > 0 && (
           <div className="flex flex-col gap-1">
-            <label className="text-xs" style={{ color: 'var(--muted)' }}>Video</label>
+            <label className="text-xs" style={{ color: 'var(--muted)' }}>{t('Video', 'Video')}</label>
             <select
               value={selectedVideo}
               onChange={e => setSelectedVideo(e.target.value)}
@@ -79,7 +81,7 @@ export default function GalleryPage() {
       </div>
 
       {loading ? (
-        <div className="text-xs" style={{ color: 'var(--muted)' }}>Loading scenes...</div>
+        <div className="text-xs" style={{ color: 'var(--muted)' }}>{t('Đang tải cảnh...', 'Loading scenes...')}</div>
       ) : (
         <VideoGallery scenes={scenes} />
       )}

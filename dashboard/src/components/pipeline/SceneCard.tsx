@@ -1,4 +1,5 @@
 import type { Scene, StatusType } from '../../types'
+import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
 
 interface SceneCardProps {
   scene: Scene
@@ -29,6 +30,7 @@ function getThumbUrl(scene: Scene): string | null {
 }
 
 export default function SceneCard({ scene, stage }: SceneCardProps) {
+  const { t } = useI18n()
   const status = getStageStatus(scene, stage)
   const thumbUrl = getThumbUrl(scene)
   const prompt = (scene.prompt ?? scene.image_prompt ?? '').slice(0, 60)
@@ -46,7 +48,7 @@ export default function SceneCard({ scene, stage }: SceneCardProps) {
         {thumbUrl ? (
           <img src={thumbUrl} alt={`Scene ${scene.display_order + 1}`} className="w-full h-full object-cover" />
         ) : (
-          <span style={{ color: 'var(--muted)', fontSize: '10px' }}>No image</span>
+          <span style={{ color: 'var(--muted)', fontSize: '10px' }}>{t('Chưa có ảnh', 'No image')}</span>
         )}
       </div>
 

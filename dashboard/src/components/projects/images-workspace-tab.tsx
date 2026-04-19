@@ -3,6 +3,7 @@ import { Image, Loader, ZoomIn, X, Plus, RefreshCw } from 'lucide-react'
 import { fetchAPI, postAPI, patchAPI } from '../../api/client'
 import type { Scene, Video, WSEvent } from '../../types'
 import EditableText from './EditableText'
+import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
 
 const STATUS_COLOR: Record<string, string> = {
   COMPLETED: 'var(--green)', PROCESSING: 'var(--yellow)',
@@ -30,6 +31,7 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
 }
 
 export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId: string; lastEvent?: WSEvent | null }) {
+  const { t } = useI18n()
   const [videos, setVideos] = useState<Video[]>([])
   const [selectedVideoId, setSelectedVideoId] = useState('')
   const [scenes, setScenes] = useState<Scene[]>([])
@@ -118,7 +120,7 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
     try { loadScenes(selectedVideoId) } finally { setRefreshing(false) }
   }
 
-  if (loading) return <div className="text-xs" style={{ color: 'var(--muted)' }}>Đang tải... / Loading...</div>
+  if (loading) return <div className="text-xs" style={{ color: 'var(--muted)' }}>{t('Đang tải...', 'Loading...')}</div>
 
   return (
     <div className="flex flex-col gap-3">
@@ -136,7 +138,7 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
         <button onClick={() => setShowAddVideo(v => !v)}
           className="flex items-center gap-1 px-2 py-1.5 rounded text-xs font-semibold"
           style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>
-          <Plus size={11} /> Video
+          <Plus size={11} /> {t('Video', 'Video')}
         </button>
         {modelLabel && (
           <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
@@ -147,7 +149,7 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
           <button onClick={refreshScenes} disabled={refreshing}
             className="flex items-center gap-1 px-2 py-1.5 rounded text-xs"
             style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}
-            title="Làm mới / Refresh">
+            title={t('Làm mới', 'Refresh')}>
             <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
           </button>
         )}
@@ -156,7 +158,7 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold ml-auto"
             style={{ background: 'rgba(59,130,246,0.85)', color: '#fff', opacity: genAll || scenes.length === 0 ? 0.5 : 1 }}>
             {genAll ? <Loader size={12} className="animate-spin" /> : <Image size={12} />}
-            Tạo tất cả / Gen All ({scenes.length})
+            {t('Tạo tất cả', 'Gen all')} ({scenes.length})
           </button>
         )}
       </div>
@@ -166,13 +168,13 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
         <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <input value={videoTitle} onChange={e => setVideoTitle(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && createVideo()}
-            placeholder="Tên video / Video title..." autoFocus
+            placeholder={t('Tên video...', 'Video title...')} autoFocus
             className="flex-1 text-xs px-2 py-1 rounded outline-none"
             style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }} />
           <button onClick={createVideo} disabled={savingVideo || !videoTitle.trim()}
             className="px-3 py-1 rounded text-xs font-semibold"
             style={{ background: 'var(--accent)', color: '#fff', opacity: savingVideo || !videoTitle.trim() ? 0.5 : 1 }}>
-            {savingVideo ? '...' : 'Tạo / Create'}
+            {savingVideo ? '...' : t('Tạo', 'Create')}
           </button>
           <button onClick={() => setShowAddVideo(false)} className="text-xs" style={{ color: 'var(--muted)' }}>✕</button>
         </div>
@@ -180,7 +182,7 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
 
       {videos.length === 0 && !showAddVideo && (
         <div className="text-xs text-center py-8" style={{ color: 'var(--muted)' }}>
-          Chưa có video. Click <strong>+ Video</strong> để tạo.
+          {t('Chưa có video. Bấm + Video để tạo.', 'No videos yet. Click + Video to create.')}
         </div>
       )}
 
@@ -224,8 +226,8 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
                       className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold"
                       style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--accent)', border: '1px solid rgba(59,130,246,0.25)' }}>
                       {genScene === s.id
-                        ? <><Loader size={10} className="animate-spin" /> Đang tạo...</>
-                        : <><Image size={10} /> Tạo ảnh / Gen</>}
+                        ? <><Loader size={10} className="animate-spin" /> {t('Đang tạo...', 'Generating...')}</>
+                        : <><Image size={10} /> {t('Tạo ảnh', 'Generate image')}</>}
                     </button>
                   </div>
                 </div>
@@ -237,17 +239,17 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
           {showAddScene ? (
             <div className="flex flex-col gap-2 rounded-lg p-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
               <textarea value={scenePrompt} onChange={e => setScenePrompt(e.target.value)} rows={2} autoFocus
-                placeholder="Mô tả cảnh cần tạo ảnh / Scene image prompt..."
+                placeholder={t('Mô tả cảnh cần tạo ảnh...', 'Scene image prompt...')}
                 className="w-full text-xs px-2 py-1.5 rounded outline-none resize-none"
                 style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }} />
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setShowAddScene(false)} className="px-3 py-1 rounded text-xs" style={{ color: 'var(--muted)' }}>
-                  Hủy / Cancel
+                  {t('Hủy', 'Cancel')}
                 </button>
                 <button onClick={addScene} disabled={savingScene || !scenePrompt.trim()}
                   className="px-3 py-1 rounded text-xs font-semibold"
                   style={{ background: 'var(--accent)', color: '#fff', opacity: savingScene || !scenePrompt.trim() ? 0.5 : 1 }}>
-                  {savingScene ? '...' : 'Thêm / Add'}
+                  {savingScene ? '...' : t('Thêm', 'Add')}
                 </button>
               </div>
             </div>
@@ -255,7 +257,7 @@ export default function ImagesWorkspaceTab({ projectId, lastEvent }: { projectId
             <button onClick={() => setShowAddScene(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-semibold"
               style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px dashed var(--border)' }}>
-              <Plus size={12} /> Thêm cảnh / Add Scene
+              <Plus size={12} /> {t('Thêm cảnh', 'Add scene')}
             </button>
           )}
         </>

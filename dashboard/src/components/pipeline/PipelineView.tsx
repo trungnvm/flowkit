@@ -5,6 +5,7 @@ import { useWebSocket } from '../../api/useWebSocket'
 import type { Character, Scene } from '../../types'
 import StageNode from './StageNode'
 import SceneCard from './SceneCard'
+import { useI18n } from '../../language-toggle-and-bilingual-ui-context'
 
 type ExpandedStage = 'refs' | 'image' | 'video' | 'upscale' | null
 
@@ -22,6 +23,7 @@ function deriveStatus(completed: number, total: number, hasFailure: boolean) {
 }
 
 export default function PipelineView({ projectId, videoId }: PipelineViewProps) {
+  const { t } = useI18n()
   const [chars, setChars] = useState<Character[]>([])
   const [scenes, setScenes] = useState<Scene[]>([])
   const [expanded, setExpanded] = useState<ExpandedStage>(null)
@@ -72,7 +74,7 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
   const stages = [
     {
       key: 'refs' as const,
-      name: 'Refs',
+      name: t('Ref', 'Refs'),
       icon: Users,
       completed: refsCompleted,
       total: refsTotal,
@@ -80,7 +82,7 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
     },
     {
       key: 'image' as const,
-      name: 'Images',
+      name: t('Ảnh', 'Images'),
       icon: Image,
       completed: imagesCompleted,
       total,
@@ -88,7 +90,7 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
     },
     {
       key: 'video' as const,
-      name: 'Videos',
+      name: t('Video', 'Videos'),
       icon: Film,
       completed: videosCompleted,
       total,
@@ -96,7 +98,7 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
     },
     {
       key: 'upscale' as const,
-      name: 'Upscale',
+      name: t('Nâng cấp', 'Upscale'),
       icon: Zap,
       completed: upscaleCompleted,
       total,
@@ -132,7 +134,7 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
       {expanded && expanded !== 'refs' && scenes.length > 0 && (
         <div>
           <div className="text-xs mb-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-            {expanded} — {scenes.length} scenes
+            {expanded} — {scenes.length} {t('cảnh', 'scenes')}
           </div>
           <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))' }}>
             {scenes.map(scene => (
@@ -146,7 +148,7 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
       {expanded === 'refs' && chars.length > 0 && (
         <div>
           <div className="text-xs mb-2 font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-            refs — {chars.length} entities
+            {t('ref', 'refs')} — {chars.length} {t('thực thể', 'entities')}
           </div>
           <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
             {chars.map(c => (
@@ -162,13 +164,13 @@ export default function PipelineView({ projectId, videoId }: PipelineViewProps) 
                   {c.reference_image_url ? (
                     <img src={c.reference_image_url} alt={c.name} className="w-full h-full object-cover" />
                   ) : (
-                    <span style={{ color: 'var(--muted)', fontSize: '10px' }}>No image</span>
+                    <span style={{ color: 'var(--muted)', fontSize: '10px' }}>{t('Chưa có ảnh', 'No image')}</span>
                   )}
                 </div>
                 <div className="font-semibold truncate" style={{ color: 'var(--text)' }}>{c.name}</div>
                 <div style={{ color: 'var(--muted)', fontSize: '10px' }}>{c.entity_type}</div>
                 <div style={{ color: c.media_id ? 'var(--green)' : 'var(--muted)', fontSize: '10px' }}>
-                  {c.media_id ? 'Ready' : 'Pending'}
+                  {c.media_id ? t('Sẵn sàng', 'Ready') : t('Chờ', 'Pending')}
                 </div>
               </div>
             ))}

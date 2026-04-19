@@ -3,8 +3,10 @@ import { fetchAPI } from '../api/client'
 import { useWebSocket } from '../api/useWebSocket'
 import type { Project, Video } from '../types'
 import PipelineView from '../components/pipeline/PipelineView'
+import { useI18n } from '../language-toggle-and-bilingual-ui-context'
 
 export default function DashboardPage() {
+  const { t } = useI18n()
   const [projects, setProjects] = useState<Project[]>([])
   const [videos, setVideos] = useState<Video[]>([])
   const [selectedProject, setSelectedProject] = useState<string>('')
@@ -48,7 +50,7 @@ export default function DashboardPage() {
           className="px-2 py-1.5 rounded text-xs"
           style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)', minWidth: '180px' }}
         >
-          <option value="">Select project…</option>
+          <option value="">{t('Chọn dự án…', 'Select project…')}</option>
           {projects.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
@@ -61,7 +63,7 @@ export default function DashboardPage() {
           className="px-2 py-1.5 rounded text-xs"
           style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)', minWidth: '180px' }}
         >
-          <option value="">Select video…</option>
+          <option value="">{t('Chọn video…', 'Select video…')}</option>
           {videos.map(v => (
             <option key={v.id} value={v.id}>{v.title}</option>
           ))}
@@ -73,7 +75,7 @@ export default function DashboardPage() {
         <PipelineView projectId={selectedProject} videoId={selectedVideo} />
       ) : (
         <div className="flex items-center justify-center flex-1" style={{ color: 'var(--muted)' }}>
-          Select a project and video to view the pipeline
+          {t('Hãy chọn dự án và video để xem pipeline', 'Select a project and video to view the pipeline')}
         </div>
       )}
     </div>

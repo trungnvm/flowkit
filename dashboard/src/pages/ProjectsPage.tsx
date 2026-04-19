@@ -4,6 +4,7 @@ import { Plus, X } from 'lucide-react'
 import { fetchAPI, postAPI } from '../api/client'
 import type { Project } from '../types'
 import ProjectDetailPage from './ProjectDetailPage'
+import { useI18n } from '../language-toggle-and-bilingual-ui-context'
 
 type FilterTab = 'ACTIVE' | 'ARCHIVED' | 'ALL'
 
@@ -63,6 +64,7 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
 }
 
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [story, setStory] = useState('')
   const [material, setMaterial] = useState('realistic')
@@ -90,32 +92,32 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
       <div className="rounded-xl p-6 w-full max-w-md flex flex-col gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-sm" style={{ color: 'var(--text)' }}>New Project</h2>
+          <h2 className="font-bold text-sm" style={{ color: 'var(--text)' }}>{t('Dự án mới', 'New Project')}</h2>
           <button onClick={onClose}><X size={16} style={{ color: 'var(--muted)' }} /></button>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>PROJECT NAME *</label>
+            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>{t('TÊN DỰ ÁN *', 'PROJECT NAME *')}</label>
             <input
               value={name} onChange={e => setName(e.target.value)}
               className="w-full px-3 py-2 rounded text-xs outline-none"
               style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)' }}
-              placeholder="My awesome video"
+              placeholder={t('Video tuyệt vời của tôi', 'My awesome video')}
               autoFocus
             />
           </div>
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>STORY</label>
+            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>{t('CÂU CHUYỆN', 'STORY')}</label>
             <textarea
               value={story} onChange={e => setStory(e.target.value)}
               rows={4}
               className="w-full px-3 py-2 rounded text-xs outline-none resize-none"
               style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)' }}
-              placeholder="Describe the story..."
+              placeholder={t('Mô tả câu chuyện...', 'Describe the story...')}
             />
           </div>
           <div>
-            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>MATERIAL STYLE</label>
+            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>{t('PHONG CÁCH CHẤT LIỆU', 'MATERIAL STYLE')}</label>
             <select
               value={material} onChange={e => setMaterial(e.target.value)}
               className="w-full px-3 py-2 rounded text-xs outline-none"
@@ -126,9 +128,9 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </div>
           {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
           <div className="flex gap-2 justify-end pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-1.5 rounded text-xs" style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>Cancel</button>
+            <button type="button" onClick={onClose} className="px-4 py-1.5 rounded text-xs" style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>{t('Huỷ', 'Cancel')}</button>
             <button type="submit" disabled={saving || !name.trim()} className="px-4 py-1.5 rounded text-xs font-semibold" style={{ background: 'var(--accent)', color: '#fff', opacity: saving || !name.trim() ? 0.6 : 1 }}>
-              {saving ? 'Creating...' : 'Create'}
+              {saving ? t('Đang tạo...', 'Creating...') : t('Tạo', 'Create')}
             </button>
           </div>
         </form>
@@ -138,6 +140,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
 }
 
 export default function ProjectsPage() {
+  const { t } = useI18n()
   const { id } = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const [tab, setTab] = useState<FilterTab>('ACTIVE')
@@ -198,14 +201,14 @@ export default function ProjectsPage() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
           style={{ background: 'var(--accent)', color: '#fff' }}
         >
-          <Plus size={13} /> New Project
+          <Plus size={13} /> {t('Dự án mới', 'New Project')}
         </button>
       </div>
 
       {loading ? (
-        <div className="text-xs" style={{ color: 'var(--muted)' }}>Loading projects...</div>
+        <div className="text-xs" style={{ color: 'var(--muted)' }}>{t('Đang tải dự án...', 'Loading projects...')}</div>
       ) : filtered.length === 0 ? (
-        <div className="text-xs" style={{ color: 'var(--muted)' }}>No {tab.toLowerCase()} projects.</div>
+        <div className="text-xs" style={{ color: 'var(--muted)' }}>{t(`Không có dự án ${tab.toLowerCase()}.`, `No ${tab.toLowerCase()} projects.`)}</div>
       ) : (
         <div className="grid grid-cols-1 gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {filtered.map(p => (

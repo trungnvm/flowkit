@@ -9,6 +9,7 @@ import CharactersWorkspaceTab from '../components/projects/characters-workspace-
 import ProjectScriptGenerationWorkspaceTab from '../components/projects/project-script-generation-workspace-tab'
 import ProjectPromptEditorWorkspaceTab from '../components/projects/project-prompt-editor-workspace-tab'
 import { useWebSocket } from '../api/useWebSocket'
+import { useI18n } from '../language-toggle-and-bilingual-ui-context'
 
 type Tab = 'Overview' | 'Characters' | 'Images' | 'Videos' | 'Script' | 'Prompt' | 'Pipeline'
 
@@ -42,17 +43,18 @@ function CopyCmd({ label, cmd, note }: { label: string; cmd: string; note?: stri
 
 // ---- Overview ----
 function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () => void }) {
+  const { t } = useI18n()
   async function patch(field: string, value: string) {
     await patchAPI(`/api/projects/${project.id}`, { [field]: value }); onRefresh()
   }
   return (
     <div className="flex flex-col gap-4 max-w-2xl">
       <div className="rounded-lg p-4 flex flex-col gap-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-        <div><div className="text-xs font-bold mb-1" style={{ color: 'var(--muted)' }}>NAME</div>
+        <div><div className="text-xs font-bold mb-1" style={{ color: 'var(--muted)' }}>{t('TÊN', 'NAME')}</div>
           <EditableText value={project.name} onSave={v => patch('name', v)} className="font-bold text-sm" /></div>
-        <div><div className="text-xs font-bold mb-1" style={{ color: 'var(--muted)' }}>DESCRIPTION</div>
+        <div><div className="text-xs font-bold mb-1" style={{ color: 'var(--muted)' }}>{t('MÔ TẢ', 'DESCRIPTION')}</div>
           <EditableText value={project.description ?? ''} onSave={v => patch('description', v)} multiline className="text-xs" /></div>
-        <div><div className="text-xs font-bold mb-1" style={{ color: 'var(--muted)' }}>STORY</div>
+        <div><div className="text-xs font-bold mb-1" style={{ color: 'var(--muted)' }}>{t('CÂU CHUYỆN', 'STORY')}</div>
           <EditableText value={project.story ?? ''} onSave={v => patch('story', v)} multiline className="text-xs" /></div>
       </div>
       <div className="rounded-lg p-4 flex flex-col gap-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
@@ -63,8 +65,8 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
           <Badge label={project.status} />
         </div>
         <div className="flex flex-col gap-1 mt-1 text-xs" style={{ color: 'var(--muted)' }}>
-          <div>Created: {formatDate(project.created_at)}</div>
-          <div>Updated: {formatDate(project.updated_at)}</div>
+          <div>{t('Tạo lúc', 'Created')}: {formatDate(project.created_at)}</div>
+          <div>{t('Cập nhật', 'Updated')}: {formatDate(project.updated_at)}</div>
         </div>
       </div>
     </div>
@@ -75,6 +77,7 @@ function OverviewTab({ project, onRefresh }: { project: Project; onRefresh: () =
 
 // ---- Pipeline ----
 function PipelineTab({ projectId, characters, videos }: { projectId: string; characters: Character[]; videos: Video[] }) {
+  const { t } = useI18n()
   const [loading, setLoading] = useState<string | null>(null)
   const [msgs, setMsgs] = useState<Record<string, string>>({})
   const [narrateVideoId, setNarrateVideoId] = useState(videos[0]?.id ?? '')
@@ -82,8 +85,8 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
   function setMsg(key: string, v: string) { setMsgs(p => ({ ...p, [key]: v })) }
   async function run(key: string, fn: () => Promise<void>) {
     setLoading(key); setMsg(key, '')
-    try { await fn(); setMsg(key, '✓ Queued!') }
-    catch (e) { setMsg(key, e instanceof Error ? e.message : 'Failed') }
+    try { await fn(); setMsg(key, t('✓ Đã đưa vào hàng đợi!', '✓ Queued!')) }
+    catch (e) { setMsg(key, e instanceof Error ? e.message : t('Thất bại', 'Failed')) }
     finally { setLoading(null) }
   }
 
@@ -91,16 +94,16 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
 
   const apiSteps = [
     {
-      num: 1, key: 'refs', label: 'Gen Reference Images', icon: <Wand2 size={12} />, color: 'var(--accent)',
-      desc: 'Generate entity reference images', disabled: missingRefs.length === 0,
-      btnLabel: missingRefs.length === 0 ? '✓ All ready' : `Gen ${missingRefs.length} Refs`,
+      num: 1, key: 'refs', label: t('Tạo ảnh tham chiếu', 'Gen reference images'), icon: <Wand2 size={12} />, color: 'var(--accent)',
+      desc: t('Tạo ảnh tham chiếu cho thực thể', 'Generate entity reference images'), disabled: missingRefs.length === 0,
+      btnLabel: missingRefs.length === 0 ? t('✓ Sẵn sàng', '✓ All ready') : `${t('Tạo', 'Gen')} ${missingRefs.length} ${t('ref', 'refs')}`,
       action: () => run('refs', () => postAPI('/api/requests/batch', {
         requests: missingRefs.map(c => ({ type: 'GENERATE_CHARACTER_IMAGE', character_id: c.id, project_id: projectId }))
       })),
     },
     {
-      num: 2, key: 'img', label: 'Gen Scene Images', icon: <Image size={12} />, color: 'rgba(59,130,246,0.85)',
-      desc: 'Generate vertical images for all scenes across all videos', disabled: false, btnLabel: 'Gen Images',
+      num: 2, key: 'img', label: t('Tạo ảnh cảnh', 'Gen scene images'), icon: <Image size={12} />, color: 'rgba(59,130,246,0.85)',
+      desc: t('Tạo ảnh dọc cho mọi cảnh trong mọi video', 'Generate vertical images for all scenes across all videos'), disabled: false, btnLabel: t('Tạo ảnh', 'Gen images'),
       action: () => run('img', async () => {
         const allScenes: Scene[] = []
         for (const v of videos) { const s = await fetchAPI<Scene[]>(`/api/scenes?video_id=${v.id}`); allScenes.push(...s) }
@@ -108,8 +111,8 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
       }),
     },
     {
-      num: 3, key: 'vid', label: 'Gen Scene Videos', icon: <Film size={12} />, color: 'rgba(139,92,246,0.85)',
-      desc: 'Generate vertical videos for all scenes', disabled: false, btnLabel: 'Gen Videos',
+      num: 3, key: 'vid', label: t('Tạo video cảnh', 'Gen scene videos'), icon: <Film size={12} />, color: 'rgba(139,92,246,0.85)',
+      desc: t('Tạo video dọc cho mọi cảnh', 'Generate vertical videos for all scenes'), disabled: false, btnLabel: t('Tạo video', 'Gen videos'),
       action: () => run('vid', async () => {
         const allScenes: Scene[] = []
         for (const v of videos) { const s = await fetchAPI<Scene[]>(`/api/scenes?video_id=${v.id}`); allScenes.push(...s) }
@@ -117,8 +120,8 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
       }),
     },
     {
-      num: 4, key: 'narrate', label: 'Gen Narrator (TTS)', icon: <Mic size={12} />, color: 'rgba(168,85,247,0.85)',
-      desc: 'Generate narration text + TTS audio', disabled: !narrateVideoId, btnLabel: 'Narrate',
+      num: 4, key: 'narrate', label: t('Tạo narrator (TTS)', 'Gen narrator (TTS)'), icon: <Mic size={12} />, color: 'rgba(168,85,247,0.85)',
+      desc: t('Tạo văn bản narration + audio TTS', 'Generate narration text + TTS audio'), disabled: !narrateVideoId, btnLabel: t('Kể chuyện', 'Narrate'),
       action: () => run('narrate', () => postAPI(`/api/videos/${narrateVideoId}/narrate`, { project_id: projectId })),
       extra: videos.length > 0 ? (
         <select value={narrateVideoId} onChange={e => setNarrateVideoId(e.target.value)}
@@ -131,16 +134,16 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
   ]
 
   const cliSteps = [
-    { num: 5, label: 'Concat Videos', cmd: '/fk-concat', note: 'Download + concat all scene videos into final MP4' },
-    { num: 6, label: 'Concat + Fit Narrator', cmd: '/fk-concat-fit-narrator', note: 'Trim scenes to TTS duration, burn overlays, concat' },
-    { num: 7, label: 'Generate Thumbnail', cmd: '/fk-thumbnail', note: 'Generate 4 YouTube thumbnail variants' },
-    { num: 8, label: 'YouTube SEO', cmd: '/fk-youtube-seo', note: 'Generate title, description, tags' },
-    { num: 9, label: 'YouTube Upload', cmd: '/fk-youtube-upload', note: 'Upload final video to YouTube' },
+    { num: 5, label: t('Nối video', 'Concat videos'), cmd: '/fk-concat', note: t('Tải + nối toàn bộ scene video thành MP4 cuối', 'Download + concat all scene videos into final MP4') },
+    { num: 6, label: t('Nối + khớp narrator', 'Concat + fit narrator'), cmd: '/fk-concat-fit-narrator', note: t('Cắt cảnh theo thời lượng TTS, burn overlay, rồi concat', 'Trim scenes to TTS duration, burn overlays, concat') },
+    { num: 7, label: t('Tạo thumbnail', 'Generate thumbnail'), cmd: '/fk-thumbnail', note: t('Tạo 4 biến thể thumbnail YouTube', 'Generate 4 YouTube thumbnail variants') },
+    { num: 8, label: 'YouTube SEO', cmd: '/fk-youtube-seo', note: t('Tạo title, description, tags', 'Generate title, description, tags') },
+    { num: 9, label: t('Upload YouTube', 'YouTube upload'), cmd: '/fk-youtube-upload', note: t('Upload video cuối lên YouTube', 'Upload final video to YouTube') },
   ]
 
   return (
     <div className="flex flex-col gap-3 max-w-2xl">
-      <div className="text-xs font-bold" style={{ color: 'var(--muted)' }}>API STEPS</div>
+      <div className="text-xs font-bold" style={{ color: 'var(--muted)' }}>{t('BƯỚC API', 'API STEPS')}</div>
       {apiSteps.map(step => (
         <div key={step.key} className="rounded-lg p-4 flex flex-col gap-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <div className="flex items-start gap-3">
@@ -162,7 +165,7 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
           </div>
         </div>
       ))}
-      <div className="text-xs font-bold mt-2" style={{ color: 'var(--muted)' }}>CLI STEPS</div>
+      <div className="text-xs font-bold mt-2" style={{ color: 'var(--muted)' }}>{t('BƯỚC CLI', 'CLI STEPS')}</div>
       {cliSteps.map(step => (
         <div key={step.num} className="flex gap-3 items-start">
           <span className="flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold shrink-0 mt-0.5"
@@ -176,6 +179,7 @@ function PipelineTab({ projectId, characters, videos }: { projectId: string; cha
 
 // ---- Main ----
 export default function ProjectDetailPage({ projectId, onBack }: Props) {
+  const { t } = useI18n()
   const [project, setProject] = useState<Project | null>(null)
   const [characters, setCharacters] = useState<Character[]>([])
   const [videos, setVideos] = useState<Video[]>([])
@@ -196,15 +200,24 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
 
   useEffect(() => { fetchAll() }, [projectId])
 
-  if (loading || !project) return <div className="text-xs" style={{ color: 'var(--muted)' }}>Loading project...</div>
+  if (loading || !project) return <div className="text-xs" style={{ color: 'var(--muted)' }}>{t('Đang tải dự án...', 'Loading project...')}</div>
 
   const tabs: Tab[] = ['Overview', 'Characters', 'Images', 'Videos', 'Script', 'Prompt', 'Pipeline']
+  const tabLabel: Record<Tab, string> = {
+    Overview: t('Tổng quan', 'Overview'),
+    Characters: t('Nhân vật', 'Characters'),
+    Images: t('Ảnh', 'Images'),
+    Videos: t('Video', 'Videos'),
+    Script: t('Kịch bản', 'Script'),
+    Prompt: 'Prompt',
+    Pipeline: 'Pipeline',
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="text-xs px-3 py-1.5 rounded"
-          style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>Back</button>
+          style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>{t('Quay lại', 'Back')}</button>
         <h1 className="font-bold text-sm" style={{ color: 'var(--text)' }}>{project.name}</h1>
       </div>
       <div className="flex gap-1" style={{ borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
@@ -216,7 +229,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
               color: tab === t ? 'var(--accent)' : 'var(--muted)',
               borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
             }}>
-            {t}
+            {tabLabel[t]}
             {t === 'Characters' && ` (${characters.length})`}
             {t === 'Videos' && ` (${videos.length})`}
           </button>

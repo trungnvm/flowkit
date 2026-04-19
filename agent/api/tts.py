@@ -20,8 +20,9 @@ from agent.models.tts import (
     VoiceTemplateResponse,
     VoiceTemplateListItem,
 )
-from agent.services.tts import generate_speech, generate_video_narration
+from agent.services.tts import generate_speech, generate_video_narration, check_omnivoice_health
 from agent.services.post_process import add_narration
+from agent.config import TTS_OMNIVOICE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,18 @@ def _validate_ref_audio(ref_audio: str) -> None:
 
     if not any(resolved.is_relative_to(d) for d in allowed):
         raise HTTPException(400, "ref_audio must be within allowed directories")
+
+
+@router.get("/tts/health")
+async def tts_health():
+    """Check OmniVoice Gradio server status. Use to decide Gradio vs subprocess path."""
+    healthy = await check_omnivoice_health(force=True)
+    return {
+        "server_url": TTS_OMNIVOICE_URL,
+        "server_online": healthy,
+        "mode": "gradio" if healthy else "subprocess",
+        "note": "Start OmniVoice server with ./app.sh to enable fast TTS (model stays warm).",
+    }
 
 
 @router.post("/tts/generate", response_model=TTSGenerateResponse)

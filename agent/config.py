@@ -62,6 +62,8 @@ MUSIC_OUTPUT_DIR = SHARED_OUTPUT_DIR / "music"
 TTS_MODEL = os.environ.get("TTS_MODEL", "k2-fsa/OmniVoice")
 TTS_DEVICE = os.environ.get("TTS_DEVICE", "cpu")  # MPS produces gibberish; CPU+fp32 works
 TTS_SAMPLE_RATE = int(os.environ.get("TTS_SAMPLE_RATE", "24000"))
+# OmniVoice Gradio server URL (model stays warm, faster than subprocess)
+TTS_OMNIVOICE_URL = os.environ.get("TTS_OMNIVOICE_URL", "http://127.0.0.1:9118")
 
 # ─── Review / Claude Vision ──────────────────────────────────
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")

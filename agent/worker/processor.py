@@ -266,7 +266,10 @@ async def _process_one(req: dict, deferred: dict = None, retry_after: dict = Non
 
     logger.info("Processing request %s type=%s", rid[:8], req_type)
     await crud.update_request(rid, status="PROCESSING")
-    await event_bus.emit("request_update", {"id": rid, "status": "PROCESSING", "type": req_type})
+    await event_bus.emit("request_update", {
+        "id": rid, "status": "PROCESSING", "type": req_type,
+        "scene_id": req.get("scene_id"), "video_id": req.get("video_id"),
+    })
 
     try:
         result = await _dispatch(req, orientation)
@@ -281,7 +284,10 @@ async def _process_one(req: dict, deferred: dict = None, retry_after: dict = Non
                     await apply_character_result(char_id, gen_result)
             else:
                 await apply_scene_result(req.get("scene_id"), req_type, orientation, gen_result)
-            await event_bus.emit("request_update", {"id": rid, "status": "COMPLETED"})
+            await event_bus.emit("request_update", {
+                "id": rid, "status": "COMPLETED", "type": req_type,
+                "scene_id": req.get("scene_id"), "video_id": req.get("video_id"),
+            })
             logger.info("Request %s COMPLETED: media=%s", rid[:8], gen_result.media_id[:20] if gen_result.media_id else "?")
     except Exception as e:
         logger.exception("Request %s exception: %s", rid[:8], e)

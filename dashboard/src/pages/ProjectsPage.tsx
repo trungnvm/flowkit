@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchAPI } from '../api/client'
+import { Plus, X } from 'lucide-react'
+import { fetchAPI, postAPI } from '../api/client'
 import type { Project } from '../types'
 import ProjectDetailPage from './ProjectDetailPage'
 
@@ -61,20 +62,98 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
   )
 }
 
+function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const [name, setName] = useState('')
+  const [story, setStory] = useState('')
+  const [material, setMaterial] = useState('realistic')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
+    setSaving(true)
+    setError('')
+    try {
+      const proj = await postAPI<Project>('/api/projects', { name: name.trim(), story: story.trim(), material })
+      onCreated(proj.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const MATERIALS = ['realistic', '3d_pixar', 'anime', 'stop_motion', 'oil_painting', 'minecraft']
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="rounded-xl p-6 w-full max-w-md flex flex-col gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-sm" style={{ color: 'var(--text)' }}>New Project</h2>
+          <button onClick={onClose}><X size={16} style={{ color: 'var(--muted)' }} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div>
+            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>PROJECT NAME *</label>
+            <input
+              value={name} onChange={e => setName(e.target.value)}
+              className="w-full px-3 py-2 rounded text-xs outline-none"
+              style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)' }}
+              placeholder="My awesome video"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>STORY</label>
+            <textarea
+              value={story} onChange={e => setStory(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2 rounded text-xs outline-none resize-none"
+              style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)' }}
+              placeholder="Describe the story..."
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold block mb-1" style={{ color: 'var(--muted)' }}>MATERIAL STYLE</label>
+            <select
+              value={material} onChange={e => setMaterial(e.target.value)}
+              className="w-full px-3 py-2 rounded text-xs outline-none"
+              style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            >
+              {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          {error && <p className="text-xs" style={{ color: 'var(--red)' }}>{error}</p>}
+          <div className="flex gap-2 justify-end pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-1.5 rounded text-xs" style={{ background: 'var(--card)', color: 'var(--muted)', border: '1px solid var(--border)' }}>Cancel</button>
+            <button type="submit" disabled={saving || !name.trim()} className="px-4 py-1.5 rounded text-xs font-semibold" style={{ background: 'var(--accent)', color: '#fff', opacity: saving || !name.trim() ? 0.6 : 1 }}>
+              {saving ? 'Creating...' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ProjectsPage() {
   const { id } = useParams<{ id?: string }>()
   const navigate = useNavigate()
   const [tab, setTab] = useState<FilterTab>('ACTIVE')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [showNew, setShowNew] = useState(false)
 
-  useEffect(() => {
+  function loadProjects() {
     setLoading(true)
     fetchAPI<Project[]>('/api/projects')
       .then(setProjects)
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadProjects() }, [])
 
   // If there's an :id param, show detail page
   if (id) {
@@ -90,22 +169,37 @@ export default function ProjectsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter tabs */}
-      <div className="flex gap-1">
-        {tabs.map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="px-3 py-1.5 rounded text-xs font-semibold transition-colors"
-            style={{
-              background: tab === t ? 'var(--accent)' : 'var(--card)',
-              color: tab === t ? '#fff' : 'var(--muted)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            {t}
-          </button>
-        ))}
+      {showNew && (
+        <NewProjectModal
+          onClose={() => setShowNew(false)}
+          onCreated={(newId) => { setShowNew(false); navigate(`/projects/${newId}`) }}
+        />
+      )}
+      {/* Filter tabs + New button */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1">
+          {tabs.map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="px-3 py-1.5 rounded text-xs font-semibold transition-colors"
+              style={{
+                background: tab === t ? 'var(--accent)' : 'var(--card)',
+                color: tab === t ? '#fff' : 'var(--muted)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setShowNew(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
+          style={{ background: 'var(--accent)', color: '#fff' }}
+        >
+          <Plus size={13} /> New Project
+        </button>
       </div>
 
       {loading ? (

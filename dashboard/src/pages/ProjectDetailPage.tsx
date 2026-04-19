@@ -6,9 +6,11 @@ import EditableText from '../components/projects/EditableText'
 import ImagesWorkspaceTab from '../components/projects/images-workspace-tab'
 import VideosWorkspaceTab from '../components/projects/videos-workspace-tab'
 import CharactersWorkspaceTab from '../components/projects/characters-workspace-tab'
+import ProjectScriptGenerationWorkspaceTab from '../components/projects/project-script-generation-workspace-tab'
+import ProjectPromptEditorWorkspaceTab from '../components/projects/project-prompt-editor-workspace-tab'
 import { useWebSocket } from '../api/useWebSocket'
 
-type Tab = 'Overview' | 'Characters' | 'Images' | 'Videos' | 'Pipeline'
+type Tab = 'Overview' | 'Characters' | 'Images' | 'Videos' | 'Script' | 'Prompt' | 'Pipeline'
 
 interface Props { projectId: string; onBack: () => void }
 
@@ -196,7 +198,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
 
   if (loading || !project) return <div className="text-xs" style={{ color: 'var(--muted)' }}>Loading project...</div>
 
-  const tabs: Tab[] = ['Overview', 'Characters', 'Images', 'Videos', 'Pipeline']
+  const tabs: Tab[] = ['Overview', 'Characters', 'Images', 'Videos', 'Script', 'Prompt', 'Pipeline']
 
   return (
     <div className="flex flex-col gap-4">
@@ -225,6 +227,8 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
         {tab === 'Characters' && <CharactersWorkspaceTab projectId={projectId} lastEvent={lastEvent} />}
         {tab === 'Images' && <ImagesWorkspaceTab projectId={projectId} lastEvent={lastEvent} />}
         {tab === 'Videos' && <VideosWorkspaceTab projectId={projectId} lastEvent={lastEvent} />}
+        {tab === 'Script' && <ProjectScriptGenerationWorkspaceTab projectId={projectId} />}
+        {tab === 'Prompt' && <ProjectPromptEditorWorkspaceTab projectId={projectId} />}
         {tab === 'Pipeline' && <PipelineTab projectId={projectId} characters={characters} videos={videos} />}
       </div>
     </div>

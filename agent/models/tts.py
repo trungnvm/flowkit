@@ -19,7 +19,7 @@ class TTSGenerateResponse(BaseModel):
 
 class NarrateVideoRequest(BaseModel):
     project_id: str
-    orientation: Literal["HORIZONTAL", "VERTICAL"] = "HORIZONTAL"
+    orientation: Literal["HORIZONTAL", "VERTICAL"] = "VERTICAL"
     speed: float = Field(1.0, ge=0.5, le=3.0)
     instruct: Optional[str] = Field(None, max_length=200)
     ref_audio: Optional[str] = Field(None, max_length=500)  # Path to voice template WAV

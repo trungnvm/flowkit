@@ -4,8 +4,8 @@
  * diện mạo xuyên suốt toàn bộ các cảnh trong video.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Loader, X, RefreshCw, ZoomIn, Wand2, RotateCcw } from 'lucide-react'
-import { fetchAPI, postAPI } from '../../api/client'
+import { Users, Loader, X, RefreshCw, ZoomIn, Wand2, RotateCcw, Upload } from 'lucide-react'
+import { fetchAPI, postAPI, postFormAPI } from '../../api/client'
 import type { Character, WSEvent } from '../../types'
 
 const ENTITY_LABEL: Record<string, string> = {
@@ -46,15 +46,20 @@ export default function CharactersWorkspaceTab({
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [genChar, setGenChar] = useState<string | null>(null)   // character id đang gen
+  const [uploadingChar, setUploadingChar] = useState<string | null>(null)
+  const [uploadErr, setUploadErr] = useState('')
   const [refreshing, setRefreshing] = useState(false)
 
-  const loadCharacters = useCallback(() => {
-    fetchAPI<Character[]>(`/api/projects/${projectId}/characters`)
-      .then(chars => { setCharacters(chars); setLoading(false) })
-      .catch(() => setLoading(false))
+  const loadCharacters = useCallback(async () => {
+    try {
+      const chars = await fetchAPI<Character[]>(`/api/projects/${projectId}/characters`)
+      setCharacters(chars)
+    } finally {
+      setLoading(false)
+    }
   }, [projectId])
 
-  useEffect(() => { loadCharacters() }, [loadCharacters])
+  useEffect(() => { void loadCharacters() }, [loadCharacters])
 
   // Auto-refresh khi gen ref image hoàn thành qua WebSocket
   useEffect(() => {
@@ -75,6 +80,23 @@ export default function CharactersWorkspaceTab({
       })
     } finally {
       setGenChar(null)
+    }
+  }
+
+  async function uploadRefImage(char: Character, file: File | null) {
+    if (!file) return
+    setUploadingChar(char.id)
+    setUploadErr('')
+    try {
+      const form = new FormData()
+      form.append('project_id', projectId)
+      form.append('file', file)
+      await postFormAPI(`/api/characters/${char.id}/upload-reference-image`, form)
+      await loadCharacters()
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : 'Upload thất bại / Upload failed')
+    } finally {
+      setUploadingChar(null)
     }
   }
 
@@ -163,9 +185,28 @@ export default function CharactersWorkspaceTab({
                     </span>
                   )}
 
-                  {/* Gen / Regen button */}
+                  {/* Upload + Gen / Regen buttons */}
+                  <label
+                    className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold cursor-pointer"
+                    style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.25)' }}>
+                    {uploadingChar === char.id
+                      ? <><Loader size={10} className="animate-spin" /> Đang tải...</>
+                      : <><Upload size={10} /> Upload ảnh / Upload</>}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingChar === char.id}
+                      onChange={e => {
+                        const file = e.target.files?.[0] ?? null
+                        void uploadRefImage(char, file)
+                        e.currentTarget.value = ''
+                      }}
+                    />
+                  </label>
+
                   {!hasImage ? (
-                    <button onClick={() => genRef(char, false)} disabled={isGenerating}
+                    <button onClick={() => genRef(char, false)} disabled={isGenerating || uploadingChar === char.id}
                       className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold"
                       style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--accent)', border: '1px solid rgba(59,130,246,0.25)' }}>
                       {isGenerating
@@ -173,7 +214,7 @@ export default function CharactersWorkspaceTab({
                         : <><Wand2 size={10} /> Tạo ảnh / Gen Ref</>}
                     </button>
                   ) : (
-                    <button onClick={() => genRef(char, true)} disabled={isGenerating}
+                    <button onClick={() => genRef(char, true)} disabled={isGenerating || uploadingChar === char.id}
                       className="flex items-center justify-center gap-1 w-full px-2 py-1 rounded text-xs font-semibold"
                       style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
                       {isGenerating
@@ -186,6 +227,10 @@ export default function CharactersWorkspaceTab({
             )
           })}
         </div>
+      )}
+
+      {uploadErr && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>{uploadErr}</p>
       )}
 
       {/* Hint */}

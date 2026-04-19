@@ -1,10 +1,13 @@
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 import aiohttp
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from agent.config import BASE_DIR
@@ -270,6 +273,108 @@ async def get_characters(pid: str):
     return await repo.get_project_characters(pid)
 
 
+@router.get("/{pid}/prompt")
+async def get_project_prompt(pid: str):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    meta = _load_project_meta(pid)
+    return ProjectPromptResponse(project_id=pid, prompt=meta.get("prompt", ""))
+
+
+@router.put("/{pid}/prompt")
+async def save_project_prompt(pid: str, body: ProjectPromptPayload):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    meta = _load_project_meta(pid)
+    meta["prompt"] = body.prompt
+    _save_project_meta(pid, meta)
+    return ProjectPromptResponse(project_id=pid, prompt=body.prompt)
+
+
+@router.post("/{pid}/prompt/upload")
+async def upload_project_prompt(pid: str, file: UploadFile = File(...)):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    filename = (file.filename or "").lower()
+    if not (filename.endswith(".txt") or filename.endswith(".md")):
+        raise HTTPException(400, "Only .txt or .md files are allowed")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Empty file")
+    if len(raw) > _MAX_PROMPT_UPLOAD_SIZE:
+        raise HTTPException(413, f"Prompt file too large. Max {_MAX_PROMPT_UPLOAD_SIZE // (1024 * 1024)}MB")
+
+    text = raw.decode("utf-8", errors="ignore")
+    if len(text) > _MAX_PROMPT_TEXT_LENGTH:
+        raise HTTPException(413, f"Prompt text too large. Max {_MAX_PROMPT_TEXT_LENGTH} characters")
+    meta = _load_project_meta(pid)
+    meta["prompt"] = text
+    _save_project_meta(pid, meta)
+    return ProjectPromptResponse(project_id=pid, prompt=text)
+
+
+@router.get("/{pid}/script")
+async def get_project_script(pid: str):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    meta = _load_project_meta(pid)
+    return ProjectScriptResponse(
+        project_id=pid,
+        provider=meta.get("script_provider"),
+        model=meta.get("script_model"),
+        script=meta.get("script", ""),
+    )
+
+
+@router.put("/{pid}/script")
+async def save_project_script(pid: str, body: ProjectScriptSaveRequest):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    meta = _load_project_meta(pid)
+    meta["script"] = body.script
+    _save_project_meta(pid, meta)
+    return ProjectScriptResponse(
+        project_id=pid,
+        provider=meta.get("script_provider"),
+        model=meta.get("script_model"),
+        script=meta.get("script", ""),
+    )
+
+
+@router.post("/{pid}/script/generate")
+async def generate_project_script(pid: str, body: ProjectScriptGenerateRequest):
+    repo = _get_repo()
+    project = await repo.get_project(pid)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    script, model = await _generate_script(body.provider, body.topic, body.language, body.max_words)
+    meta = _load_project_meta(pid)
+    meta["script"] = script
+    meta["script_provider"] = body.provider.lower().strip()
+    meta["script_model"] = model
+    _save_project_meta(pid, meta)
+
+    return ProjectScriptResponse(
+        project_id=pid,
+        provider=meta["script_provider"],
+        model=model,
+        script=script,
+    )
+
+
 @router.get("/{pid}/output-dir")
 async def get_output_dir(pid: str):
     """Get or create project output directory with meta.json."""
@@ -320,6 +425,166 @@ _ASPECT_RATIO_MAP = {
     "LANDSCAPE": "IMAGE_ASPECT_RATIO_LANDSCAPE",
     "PORTRAIT": "IMAGE_ASPECT_RATIO_PORTRAIT",
 }
+
+_SCRIPT_PROVIDERS = {"anthropic", "openai", "gemini", "dashscope"}
+_MAX_PROMPT_UPLOAD_SIZE = 2 * 1024 * 1024
+_MAX_PROMPT_TEXT_LENGTH = 200_000
+_SCRIPT_MODEL_ENV = {
+    "anthropic": "ANTHROPIC_MODEL",
+    "openai": "OPENAI_MODEL",
+    "gemini": "GEMINI_MODEL",
+    "dashscope": "DASHSCOPE_MODEL",
+}
+_SCRIPT_MODEL_DEFAULT = {
+    "anthropic": "claude-sonnet-4-6",
+    "openai": "gpt-4.1",
+    "gemini": "gemini-2.5-pro",
+    "dashscope": "qwen-max",
+}
+
+
+def _project_meta_dir(pid: str) -> Path:
+    d = BASE_DIR / "output" / "_project-meta"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{pid}.json"
+
+
+def _load_project_meta(pid: str) -> dict:
+    p = _project_meta_dir(pid)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {}
+
+
+def _save_project_meta(pid: str, data: dict) -> None:
+    p = _project_meta_dir(pid)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+class ProjectPromptPayload(BaseModel):
+    prompt: str = ""
+
+
+class ProjectPromptResponse(BaseModel):
+    project_id: str
+    prompt: str
+
+
+class ProjectScriptGenerateRequest(BaseModel):
+    provider: str
+    topic: str
+    language: str = "vi"
+    max_words: int = 450
+
+
+class ProjectScriptSaveRequest(BaseModel):
+    script: str
+
+
+class ProjectScriptResponse(BaseModel):
+    project_id: str
+    provider: str | None = None
+    model: str | None = None
+    script: str
+
+
+async def _generate_script(provider: str, topic: str, language: str, max_words: int) -> tuple[str, str]:
+    p = provider.strip().lower()
+    if p not in _SCRIPT_PROVIDERS:
+        raise HTTPException(400, f"Unsupported provider: {provider}")
+
+    model = os.environ.get(_SCRIPT_MODEL_ENV[p], _SCRIPT_MODEL_DEFAULT[p])
+    prompt = (
+        f"Write a concise video script in language '{language}'. "
+        f"Topic: {topic}. Max words: {max_words}. "
+        "Return plain text only, no markdown headings."
+    )
+
+    try:
+        if p == "anthropic":
+            key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if not key:
+                raise HTTPException(400, "ANTHROPIC_API_KEY is missing")
+            import anthropic
+            client = anthropic.AsyncAnthropic(api_key=key)
+            resp = await client.messages.create(
+                model=model,
+                max_tokens=1200,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = "".join([b.text for b in resp.content if getattr(b, "type", "") == "text"]).strip()
+            if not text:
+                raise HTTPException(502, "Anthropic returned empty script")
+            return text, model
+
+        if p == "openai":
+            key = os.environ.get("OPENAI_API_KEY", "")
+            if not key:
+                raise HTTPException(400, "OPENAI_API_KEY is missing")
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                r = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.7,
+                    },
+                )
+                if r.status_code >= 400:
+                    raise HTTPException(r.status_code, f"OpenAI error: {r.text}")
+                data = r.json()
+                text = (data.get("choices", [{}])[0].get("message", {}).get("content", "") or "").strip()
+                if not text:
+                    raise HTTPException(502, "OpenAI returned empty script")
+                return text, model
+
+        if p == "gemini":
+            key = os.environ.get("GEMINI_API_KEY", "")
+            if not key:
+                raise HTTPException(400, "GEMINI_API_KEY is missing")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                r = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
+                if r.status_code >= 400:
+                    raise HTTPException(r.status_code, f"Gemini error: {r.text}")
+                data = r.json()
+                text = ""
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    text = "".join([part.get("text", "") for part in parts]).strip()
+                if not text:
+                    raise HTTPException(502, "Gemini returned empty script")
+                return text, model
+
+        key = os.environ.get("DASHSCOPE_API_KEY", "")
+        if not key:
+            raise HTTPException(400, "DASHSCOPE_API_KEY is missing")
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                },
+            )
+            if r.status_code >= 400:
+                raise HTTPException(r.status_code, f"DashScope error: {r.text}")
+            data = r.json()
+            text = (data.get("choices", [{}])[0].get("message", {}).get("content", "") or "").strip()
+            if not text:
+                raise HTTPException(502, "DashScope returned empty script")
+            return text, model
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"{p} provider request failed: {str(e)}")
 
 
 class ThumbnailRequest(BaseModel):

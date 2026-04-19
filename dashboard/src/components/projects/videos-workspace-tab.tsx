@@ -120,10 +120,20 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
   async function narrate() {
     setNarrating(true); setNarrateMsg('')
     try {
-      await postAPI(`/api/videos/${selectedVideoId}/narrate`, { project_id: projectId })
-      setNarrateMsg('Đã thêm vào hàng đợi / Queued!')
+      await postAPI(`/api/videos/${selectedVideoId}/narrate`, {
+        project_id: projectId,
+        orientation,
+      })
+      setNarrateMsg('Tạo narrate thành công / Success')
     } catch (e) {
-      setNarrateMsg(e instanceof Error ? e.message : 'Lỗi / Failed')
+      const msg = e instanceof Error ? e.message : 'Lỗi / Failed'
+      if (msg.includes('No scenes found for video')) {
+        setNarrateMsg('Video chưa có scene / No scenes in this video')
+      } else if (msg.includes('No scenes in range')) {
+        setNarrateMsg('Khoảng scene không hợp lệ / Invalid scene range')
+      } else {
+        setNarrateMsg(msg)
+      }
     } finally { setNarrating(false) }
   }
 
@@ -185,7 +195,7 @@ export default function VideosWorkspaceTab({ projectId, lastEvent }: { projectId
               Kể chuyện / Narrate
             </button>
             {narrateMsg && (
-              <span className="text-xs" style={{ color: narrateMsg.includes('Queued') ? 'var(--green)' : 'var(--red)' }}>
+              <span className="text-xs" style={{ color: narrateMsg.includes('thành công') || narrateMsg.includes('Success') ? 'var(--green)' : 'var(--red)' }}>
                 {narrateMsg}
               </span>
             )}
